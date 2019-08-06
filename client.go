@@ -1,0 +1,514 @@
+package extendo
+
+import (
+	"bufio"
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"sort"
+	"sync"
+
+	logs "github.com/kjsanger/logshim"
+	"github.com/pkg/errors"
+)
+
+const (
+	CHMOD     = "chmod"     // chmod baton operation
+	CHECKSUM  = "checksum"  // checksum baton operation
+	GET       = "get"       // get baton operation
+	LIST      = "list"      // list baton operation
+	METAMOD   = "metamod"   // metamod baton operation
+	METAADD   = "add"       // metamod add baton operation
+	METAREM   = "rem"       // metamod rem baton operation
+	METAQUERY = "metaquery" // METAQUERY baton operation
+	MKDIR     = "mkdir"     // mkdir baton operation
+	PUT       = "put"       // put baton operation
+	REMOVE    = "remove"    // rm baton operation
+	RMDIR     = "rmdir"     // rmdir baton operation
+)
+
+// Client is a launcher for a baton sub-process which holds its system I/O
+// streams and its channels.
+type Client struct {
+	path        string             // Path of the baton executable.
+	cmd         *exec.Cmd          // Cmd of the sub-process, once started.
+	stdin       io.WriteCloser     // stdin of the sub-process, once started.
+	stdout      io.ReadCloser      // stdout of the sub-process, once started.
+	stderr      io.ReadCloser      // stderr of the sub-process, once started.
+	in          chan []byte        // For sending to the sub-process.
+	out         chan []byte        // For receiving from the sub-process.
+	cancel      context.CancelFunc // For stopping the I/O goroutines.
+	ioWaitGroup *sync.WaitGroup    // WaitGroup for I/O goroutines.
+}
+
+// Envelope is the JSON document accepted by baton-do, describing an operation
+// to perform on a target. It is also the document returned by baton-do
+// afterwards, describing the outcome of the operation, including return value
+// and errors.
+type Envelope struct {
+	// Operation for baton-do.
+	Operation string `json:"operation"`
+	// Arguments for operation.
+	Arguments Args `json:"arguments"`
+	// Target of the operation.
+	Target RodsItem `json:"target"`
+	// Result of the operation.
+	Result *ResultWrapper `json:"result,omitempty"`
+	// ErrorMsg from the operation.
+	ErrorMsg *ErrorMsg `json:"error,omitempty"`
+}
+
+// Args contains the arguments for the various baton-do operation parameters.
+type Args struct {
+	// Request an operation.
+	Operation string `json:"operation,omitempty"`
+	// Request ACLs.
+	ACL bool `json:"acl,omitempty"`
+	// Request metadata AVUs.
+	AVU bool `json:"avu,omitempty"`
+	// Request checksums.
+	Checksum bool `json:"checksum,omitempty"`
+	// Restrict to collections.
+	Collection bool `json:"collection,omitempty"`
+	// Request collection contents.
+	Contents bool `json:"contents,omitempty"`
+	// Force an operation.
+	Force bool `json:"force,omitempty"`
+	// Restrict to data objects.
+	Object bool `json:"object,omitempty"`
+	// Request a recursive operation.
+	Recurse bool `json:"recurse,omitempty"`
+	// Request replicate information.
+	Replicate bool `json:"replicate,omitempty"`
+	// Request data object size.
+	Size bool `json:"size,omitempty"`
+	// Request timestamps.
+	Timestamp bool `json:"timestamp,omitempty"`
+}
+
+type ResultWrapper struct {
+	Item *RodsItem   `json:"single,omitempty"`
+	List *[]RodsItem `json:"multiple,omitempty"`
+}
+
+type ErrorMsg struct {
+	Message string `json:"message"`
+	Code    int32  `json:"code"`
+}
+
+type RodsError struct {
+	err  error
+	code int32
+}
+
+func (e *RodsError) Error() string {
+	return fmt.Sprintf("%s code: %d", e.err, e.code)
+}
+
+func (e *RodsError) Code() int32 {
+	return e.code
+}
+
+func Start(path string, arg ...string) (*Client, error) {
+	log := logs.GetLogger()
+
+	baton, err := exec.LookPath(path)
+	if err != nil {
+		return nil, err
+	}
+
+	cmd := exec.Command(baton, arg...)
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return nil, err
+	}
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, err
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return nil, err
+	}
+
+	if err = cmd.Start(); err != nil {
+		return nil, err
+	}
+
+	// Sub-process input and response synchronisation
+	in := make(chan []byte)
+	out := make(chan []byte)
+
+	// I/O goroutine cancelling and cleanup
+	cancelCtx, cancel := context.WithCancel(context.Background())
+	var wg sync.WaitGroup
+	wg.Add(3) // The stdin, stdout and stderr goroutines
+
+	// Send messages to the baton sub-process
+	go func(ctx context.Context) {
+		defer wg.Done()
+
+		for {
+			select {
+			case <-ctx.Done():
+				// Close stdin to unblock the reader
+				if ce := stdin.Close(); ce != nil {
+					log.Error().Err(ce).Str("executable", path).
+						Msg("failed to close stdin")
+				}
+				return
+			case buf := <-in:
+				n, werr := stdin.Write(append(buf, '\n'))
+
+				if werr != nil {
+					log.Error().Err(werr).
+						Str("executable", path).
+						Str("value", string(buf)).
+						Int("num_written", n).
+						Msg("error writing to stdin")
+				}
+			}
+		}
+	}(cancelCtx)
+
+	// Receive messages from the baton sub-process
+	go func(ctx context.Context) {
+		defer wg.Done()
+
+		rd := bufio.NewReader(stdout)
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				// On cancelling, this is unblocked by the send goroutine
+				// closing stdin
+				bout, re := rd.ReadBytes('\n')
+				if re == nil {
+					out <- bytes.TrimRight(bout, "\r\n")
+				} else if re == io.EOF {
+					log.Debug().Str("executable", path).
+						Msg("reached EOF on stdout")
+				} else {
+					log.Error().Err(re).Str("executable", path).
+						Msg("read error on stdout")
+				}
+			}
+		}
+	}(cancelCtx)
+
+	go func(ctx context.Context) {
+		defer wg.Done()
+
+		rd := bufio.NewReader(stderr)
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				bout, re := rd.ReadBytes('\n')
+				if re == nil {
+					out := bytes.TrimRight(bout, "\r\n")
+					log.Warn().Msg(string(out))
+				} else if re == io.EOF {
+					log.Debug().Str("executable", path).
+						Msg("reached EOF on stderr")
+				} else {
+					log.Error().Err(re).Str("executable", path).
+						Msg("read error on stderr")
+				}
+			}
+		}
+	}(cancelCtx)
+
+	client := &Client{path, cmd,
+		stdin, stdout, stderr,
+		in, out, cancel, &wg}
+
+	return client, err
+}
+
+// Stop stops the baton sub-process, if it is running. Returns any error
+// from the sub-process.
+func (client *Client) Stop() error {
+	if !client.IsRunning() {
+		return nil
+	}
+
+	client.cancel()
+	client.ioWaitGroup.Wait()
+	return client.cmd.Wait()
+}
+
+func (client *Client) StopIgnoreError() {
+	if err := client.Stop(); err != nil {
+		logs.GetLogger().Error().Err(err).Msg("stopped client")
+	}
+}
+
+// ClientPid returns the process ID of the baton sub-process if it has started,
+// or -1 otherwise.
+func (client *Client) ClientPid() int {
+	if client.IsRunning() {
+		return client.cmd.Process.Pid
+	}
+	return -1
+}
+
+// IsRunning returns true if the baton batonExecutable sub-process is running, or false
+// otherwise.
+func (client *Client) IsRunning() bool {
+	return client.cmd.Process != nil &&
+		!(client.cmd.ProcessState != nil && client.cmd.ProcessState.Exited())
+}
+
+func (client *Client) Chmod(args Args, item RodsItem) ([]RodsItem, error) {
+	return client.execute(CHMOD, args, item)
+}
+
+func (client *Client) Checksum(args Args, item RodsItem) ([]RodsItem, error) {
+	return client.execute(CHECKSUM, args, item)
+}
+
+func (client *Client) Get(args Args, item RodsItem) ([]RodsItem, error) {
+	return client.execute(GET, args, item)
+}
+
+func (client *Client) List(args Args, item RodsItem) ([]RodsItem, error) {
+	if args.Recurse {
+		return client.listRecurse(args, item)
+	}
+
+	return client.execute(LIST, args, item)
+}
+
+func (client *Client) MetaMod(args Args, item RodsItem) ([]RodsItem, error) {
+	return client.execute(METAMOD, args, item)
+}
+
+func (client *Client) MetaAdd(args Args, item RodsItem) ([]RodsItem, error) {
+	args.Operation = METAADD
+	return client.MetaMod(args, item)
+}
+
+func (client *Client) MetaRem(args Args, item RodsItem) ([]RodsItem, error) {
+	args.Operation = METAREM
+	return client.MetaMod(args, item)
+}
+
+func (client *Client) MetaQuery(args Args, item RodsItem) ([]RodsItem, error) {
+	if !(args.Object || args.Collection) {
+		return nil, errors.Errorf("metaquery arguments must specify " +
+			"Object and/or Collection targets; neither were specified")
+	}
+
+	return client.execute(METAQUERY, args, item)
+}
+
+func (client *Client) MkDir(args Args, item RodsItem) ([]RodsItem, error) {
+	return client.execute(MKDIR, args, item)
+}
+
+func (client *Client) Put(args Args, item RodsItem) ([]RodsItem, error) {
+	if args.Recurse {
+		return client.putRecurse(args, item)
+	}
+
+	return client.execute(PUT, args, item)
+}
+
+func (client *Client) RemObj(args Args, item RodsItem) ([]RodsItem, error) {
+	return client.execute(REMOVE, args, item)
+}
+
+func (client *Client) RemDir(args Args, item RodsItem) ([]RodsItem, error) {
+	return client.execute(RMDIR, args, item)
+}
+
+func (client *Client) listRecurse(args Args, item RodsItem) ([]RodsItem, error) {
+	var items RodsItemArr
+
+	if item.IsDataObject() {
+		return []RodsItem{item}, nil
+	}
+
+	items = append(items, item)
+
+	args.Contents = true
+	populated, err := client.execute(LIST, args, item)
+	if err == nil {
+		for _, elt := range populated[0].IContents {
+			if elt.IsCollection() {
+				content, err := client.listRecurse(args, elt)
+				if err != nil {
+					break
+				}
+
+				items = append(items, content...)
+			} else {
+				items = append(items, elt)
+			}
+		}
+	}
+	sort.Sort(items)
+
+	return items, err
+}
+
+func (client *Client) putRecurse(args Args, item RodsItem) ([]RodsItem, error) {
+	var newItems []RodsItem
+
+	// It is just a simple data object
+	if item.IsLocalFile() && (item.IsDataObject() || item.IsCollection()) {
+		return client.execute(PUT, args, item)
+	}
+
+	if !item.IsLocalDir() {
+		return newItems, errors.Errorf("cannot recursively put %s "+
+			"into %s because the former is not a directory",
+			item.LocalPath(), item.RodsPath())
+	}
+	if !item.IsCollection() {
+		return newItems, errors.Errorf("cannot recursively put %s "+
+			"into %s because the latter is not a collection",
+			item.LocalPath(), item.RodsPath())
+	}
+
+	log := logs.GetLogger()
+	rodsRoot := item.RodsPath()
+
+	walkFn := func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			if os.IsNotExist(err) {
+				log.Warn().Err(err).Str("path", path).
+					Msg("file was deleted")
+				return nil
+			}
+
+			return err
+		}
+
+		if !info.IsDir() {
+			dir := filepath.Dir(path)
+			obj := RodsItem{
+				IDirectory: dir,
+				IFile:      info.Name(),
+				IPath:      filepath.Clean(filepath.Join(rodsRoot, dir)),
+				IName:      info.Name()}
+			newItems = append(newItems, obj)
+		}
+
+		return err
+	}
+
+	werr := filepath.Walk(item.LocalPath(), walkFn)
+	if werr != nil {
+		return newItems, werr
+	}
+
+	for i, elt := range newItems {
+		// Create the leading collections, if they are not there
+		coll := RodsItem{IPath: elt.IPath}
+		_, cerr := client.execute(MKDIR, Args{Recurse: true}, coll)
+		if cerr != nil {
+			return newItems, cerr
+		}
+
+		// Put the data object
+		objs, oerr := client.execute(PUT, args, elt)
+		if oerr != nil {
+			return newItems, oerr
+		}
+
+		// Update newItems with a populated item
+		newItems[i] = objs[0]
+	}
+
+	return newItems, nil
+}
+
+func (client *Client) execute(op string, args Args, item RodsItem) ([]RodsItem,
+	error) {
+	response, err := client.send(wrap(op, args, item))
+	if err != nil {
+		return nil, err
+	}
+
+	return unwrap(response)
+}
+
+func (client *Client) send(envelope *Envelope) (*Envelope, error) {
+	log := logs.GetLogger()
+
+	jsonMessage, err := json.Marshal(envelope)
+	if err != nil {
+		return nil, err
+	}
+
+	log.Debug().Str("message", string(jsonMessage)).Msg("Sending")
+	client.in <- jsonMessage
+	jsonResponse := <-client.out
+	log.Debug().Str("response", string(jsonResponse)).Msg("Received")
+
+	response := &Envelope{}
+	if err = json.Unmarshal(jsonResponse, response); err != nil {
+		return nil, err
+	}
+
+	return response, err
+}
+
+func wrap(operation string, args Args, target RodsItem) *Envelope {
+	return &Envelope{Operation: operation, Arguments: args, Target: target}
+}
+
+func unwrap(envelope *Envelope) ([]RodsItem, error) {
+	var items RodsItemArr
+	if envelope.ErrorMsg != nil {
+		re := RodsError{errors.New(envelope.ErrorMsg.Message),
+			envelope.ErrorMsg.Code}
+
+		return items, errors.Wrapf(&re, "%s operation failed",
+			envelope.Operation)
+	}
+
+	if envelope.Result == nil {
+		return items, errors.Errorf("invalid %s operation "+
+			"envelope (no result)", envelope.Operation)
+	}
+
+	switch {
+	case envelope.Result.List != nil:
+		items = *envelope.Result.List
+	case envelope.Result.Item != nil:
+		items = []RodsItem{*envelope.Result.Item}
+	default:
+		return items, errors.Errorf("invalid %s operation "+
+			"result (no content)", envelope.Operation)
+	}
+
+	sort.Sort(items)
+
+	for _, item := range items {
+		var avus AVUArr = item.IAVUs
+		sort.Sort(avus)
+		item.IAVUs = avus
+
+		var acls ACLArr = item.IACLs
+		sort.Sort(acls)
+		item.IACLs = acls
+
+		var timestamps TimestampArr = item.ITimestamps
+		sort.Sort(timestamps)
+		item.ITimestamps = timestamps
+	}
+
+	return items, nil
+}
