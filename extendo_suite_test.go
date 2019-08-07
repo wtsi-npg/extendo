@@ -41,7 +41,7 @@ var filePaths = []string{
 }
 
 func TestExtendo(t *testing.T) {
-	log := dlog.New(GinkgoWriter, logs.DebugLevel)
+	log := dlog.New(GinkgoWriter, logs.WarnLevel)
 	logs.InstallLogger(log)
 
 	RegisterFailHandler(Fail)
@@ -94,8 +94,9 @@ var _ = Describe("List an iRODS path", func() {
 		rootColl string
 		workColl string
 
-		testColl ex.RodsItem
-		testObj  ex.RodsItem
+		testColl     ex.RodsItem
+		testObj      ex.RodsItem
+		testChecksum = "1181c1834012245d785120e3505ed169"
 	)
 
 	BeforeEach(func() {
@@ -220,8 +221,7 @@ var _ = Describe("List an iRODS path", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(len(items)).To(Equal(1))
-			Expect(items[0].IChecksum).
-				To(Equal("1181c1834012245d785120e3505ed169"))
+			Expect(items[0].IChecksum).To(Equal(testChecksum))
 		})
 
 		It("should have a size if requested", func() {
@@ -244,7 +244,7 @@ var _ = Describe("List an iRODS path", func() {
 			Expect(reps[0]).To(Equal(ex.Replicate{
 				Resource: "demoResc",
 				Location: "localhost",
-				Checksum: "1181c1834012245d785120e3505ed169",
+				Checksum: testChecksum,
 				Valid:    true}))
 		})
 
@@ -297,6 +297,7 @@ var _ = Describe("Put a file into iRODS", func() {
 
 		existingObject ex.RodsItem
 		testObject     ex.RodsItem
+		testChecksum   = "1181c1834012245d785120e3505ed169"
 	)
 
 	BeforeEach(func() {
@@ -313,11 +314,13 @@ var _ = Describe("Put a file into iRODS", func() {
 		Expect(err).NotTo(HaveOccurred())
 		objFile := "reads99.fast5"
 
-		testObject = ex.RodsItem{IDirectory: objDir, IFile: "reads1.fast5",
+		testObject = ex.RodsItem{IDirectory: objDir,
+			IFile: "reads1.fast5",
 			IPath: workColl, IName: objFile}
 
 		coll := filepath.Join(workColl, "testdata/1/reads/fast5")
-		existingObject = ex.RodsItem{IDirectory: objDir, IFile: "reads1.fast5",
+		existingObject = ex.RodsItem{IDirectory: objDir,
+			IFile: "reads1.fast5",
 			IPath: coll, IName: "reads1.fast5"}
 	})
 
@@ -339,7 +342,7 @@ var _ = Describe("Put a file into iRODS", func() {
 			Expect(items[0].IName).To(Equal(testObject.IName))
 		})
 
-		It("should not have a checksum", func() {
+		It("should not return a checksum by default", func() {
 			items, err := client.Put(ex.Args{}, testObject)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(len(items)).To(Equal(1))
@@ -351,13 +354,12 @@ var _ = Describe("Put a file into iRODS", func() {
 				items, err := client.Put(ex.Args{Checksum: true}, testObject)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(len(items)).To(Equal(1))
-				Expect(items[0].IChecksum).
-					To(Equal("1181c1834012245d785120e3505ed169"))
+				Expect(items[0].IChecksum).To(Equal(testChecksum))
 			})
 		})
 	})
 
-	When("a data object is put to overwrite one already in iRODS", func() {
+	When("overwriting a data object", func() {
 		It("should not raise an error", func() {
 			items, err := client.Put(ex.Args{}, existingObject)
 			Expect(err).NotTo(HaveOccurred())
@@ -386,15 +388,17 @@ var _ = Describe("Put a directory into iRODS", func() {
 
 	When("a local directory is put into iRODS, without recursion", func() {
 		It("should fail to create that collection", func() {
-			testItem := ex.RodsItem{IDirectory: "testdata", IPath: workColl}
+			testItem :=
+				ex.RodsItem{IDirectory: "testdata", IPath: workColl}
 			Expect(testItem.IsLocalDir()).To(BeTrue())
 			Expect(testItem.IsCollection()).To(BeTrue())
 			Expect(testItem.IsLocalFile()).To(BeFalse())
 			Expect(testItem.IsDataObject()).To(BeFalse())
 
-			// iRODS considers a non-recursive put to be a transfer of a file
-			// to a data object. A local file does not exist (just a local
-			// directory), so iRODS' client code raises an error.
+			// iRODS considers a non-recursive put to be a transfer of
+			// a file to a data object. A local file does not exist
+			// (just a local directory), so iRODS' client code raises
+			// an error.
 			_, err := client.Put(ex.Args{Recurse: false}, testItem)
 			Expect(err).To(HaveOccurred())
 		})
@@ -697,7 +701,7 @@ var _ = Describe("Add metadata", func() {
 		testColl ex.RodsItem
 		testObj  ex.RodsItem
 
-		newAVU = ex.AVU{Attr:"abcdefgh",Value:"1234567890"}
+		newAVU = ex.AVU{Attr: "abcdefgh", Value: "1234567890"}
 	)
 
 	BeforeEach(func() {
@@ -757,6 +761,114 @@ var _ = Describe("Add metadata", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(items[0].IAVUs).To(ContainElement(newAVU))
 			})
+		})
+	})
+})
+
+var _ = Describe("Archive a file to iRODS", func() {
+	var (
+		client *ex.Client
+		err    error
+
+		rootColl string
+		workColl string
+
+		existingObject ex.RodsItem
+		testObject     ex.RodsItem
+
+		testChecksum = "1181c1834012245d785120e3505ed169"
+		newChecksum  = "348bd3ce10ec00ecc29d31ec97cd5839"
+	)
+
+	BeforeEach(func() {
+		client, err = ex.Start(batonExecutable, batonArgs...)
+		Expect(err).NotTo(HaveOccurred())
+
+		rootColl = "/testZone/home/irods"
+		workColl = tmpRodsPath(rootColl, "ExtendoPut")
+
+		err = putTestData("testdata/", workColl)
+		Expect(err).NotTo(HaveOccurred())
+
+		objDir, err := filepath.Abs("testdata/1/reads/fast5")
+		Expect(err).NotTo(HaveOccurred())
+		objFile := "reads99.fast5"
+
+		testObject = ex.RodsItem{IDirectory: objDir,
+			IFile: "reads1.fast5",
+			IPath: workColl, IName: objFile}
+
+		coll := filepath.Join(workColl, "testdata/1/reads/fast5")
+		existingObject = ex.RodsItem{IDirectory: objDir,
+			IFile: "reads1.fast5",
+			IPath: coll, IName: "reads1.fast5"}
+	})
+
+	AfterEach(func() {
+		err = removeTestData(workColl)
+		Expect(err).NotTo(HaveOccurred())
+
+		client.StopIgnoreError()
+	})
+
+	Context("archiving a data object", func() {
+		When("a new data object", func() {
+			When("the testChecksum is matched", func() {
+				It("should be present in iRODS afterwards", func() {
+					item, err := client.Archive(ex.Args{}, testObject, testChecksum)
+					Expect(err).NotTo(HaveOccurred())
+
+					items, err := client.List(ex.Args{}, item)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(items[0].IPath).To(Equal(testObject.IPath))
+					Expect(items[0].IName).To(Equal(testObject.IName))
+				})
+
+				It("should return the testChecksum", func() {
+					item, err := client.Archive(ex.Args{}, testObject, testChecksum)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(item.IChecksum).To(Equal(testChecksum))
+				})
+			})
+
+			When("the testChecksum is mismatched", func() {
+				It("archiving should fail", func() {
+					_, err := client.Archive(ex.Args{}, testObject,
+						"no_such_checksum")
+					Expect(err).To(HaveOccurred())
+				})
+			})
+		})
+
+		When("overwriting a data object with a different file", func() {
+			When("the testChecksum is matched", func() {
+				It("should be present in iRODS afterwards", func() {
+					existingObject.IFile = "reads2.fast5" // a different file
+					item, err := client.Archive(ex.Args{}, existingObject, newChecksum)
+					Expect(err).NotTo(HaveOccurred())
+
+					items, err := client.List(ex.Args{}, item)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(items[0].IPath).To(Equal(existingObject.IPath))
+					Expect(items[0].IName).To(Equal(existingObject.IName))
+				})
+
+				It("should return the new testChecksum", func() {
+					existingObject.IFile = "reads2.fast5"
+					item, err := client.Archive(ex.Args{}, existingObject, newChecksum)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(item.IChecksum).To(Equal(newChecksum))
+				})
+
+			})
+		})
+	})
+
+	Context("archiving a collection", func() {
+		It("should fail to archive", func() {
+			coll := ex.RodsItem{IDirectory: "testdata", IPath: workColl}
+			_, err := client.Archive(ex.Args{}, coll, "")
+			Expect(err).To(HaveOccurred())
 		})
 	})
 })

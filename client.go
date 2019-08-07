@@ -262,17 +262,24 @@ func (client *Client) ClientPid() int {
 	return -1
 }
 
-// IsRunning returns true if the baton batonExecutable sub-process is running, or false
-// otherwise.
+// IsRunning returns true if the baton batonExecutable sub-process is
+// running, or false otherwise.
 func (client *Client) IsRunning() bool {
 	return client.cmd.Process != nil &&
 		!(client.cmd.ProcessState != nil && client.cmd.ProcessState.Exited())
 }
 
+// Chmod sets permissions on a collection or data object. By setting
+// Recurse=true in Args, the operation may be made recursive.
 func (client *Client) Chmod(args Args, item RodsItem) ([]RodsItem, error) {
 	return client.execute(CHMOD, args, item)
 }
 
+// Checksum calculates a checksum for a data object. iRODS makes this a
+// no-op if a checksum is already recorded. However, this can be overridden by
+// setting Force=true in Args. When called, this sets or updates the checksums
+// on all replicates. If Checksum=true is set in Args, the new checksum will
+// be reported in the return value.
 func (client *Client) Checksum(args Args, item RodsItem) ([]RodsItem, error) {
 	return client.execute(CHECKSUM, args, item)
 }
@@ -281,6 +288,19 @@ func (client *Client) Get(args Args, item RodsItem) ([]RodsItem, error) {
 	return client.execute(GET, args, item)
 }
 
+// List retrieves information about a collection or data object. The items
+// returned are sorted as a RodsItemArr (collections first, then by path and
+// finally by name). The detailed composition of the items is influenced by the
+// supplied Args:
+//
+// Args.ACL = true        Include ACLs
+// Args.AVU = true        Include AVUs
+// Args.Contents = true   Include collection direct contents
+// Args.Recurse = true    Recurse into collections
+// Args.Replicates = true Include replicates for data objects
+// Args.Size = true       Include size for data objects
+// Args.Timestamp = true  Include timestamps for data objects
+//
 func (client *Client) List(args Args, item RodsItem) ([]RodsItem, error) {
 	if args.Recurse {
 		return client.listRecurse(args, item)
@@ -322,6 +342,38 @@ func (client *Client) Put(args Args, item RodsItem) ([]RodsItem, error) {
 	}
 
 	return client.execute(PUT, args, item)
+}
+
+// Archive copies a file to a data object. It differs from Put in that it
+// always forces a checksum calculation on the server side and also checks the
+// returned checksum against an independently supplied checksum argument.
+func (client *Client) Archive(args Args, item RodsItem, checksum string) (
+	RodsItem, error) {
+	var archived RodsItem
+
+	if !item.IsLocalFile() {
+		return archived,
+			errors.Errorf("cannot archive %s as it is not a file",
+				item.String())
+	}
+
+	items, perr := client.Put(Args{Checksum: true, Force: true}, item)
+	if perr != nil {
+		return archived, perr
+	}
+	archived, uerr := Unwrap(items)
+	if uerr != nil {
+		return archived, uerr
+	}
+
+	if archived.IChecksum != checksum {
+		return archived,
+			errors.Errorf("failed to archive %s: local checksum '%s' "+
+				"did not match remote checksum '%s'",
+				item.String(), checksum, archived.IChecksum)
+	}
+
+	return archived, nil
 }
 
 func (client *Client) RemObj(args Args, item RodsItem) ([]RodsItem, error) {
