@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 
 	logs "github.com/kjsanger/logshim"
@@ -25,7 +26,7 @@ const (
 	METAMOD   = "metamod"   // metamod baton operation
 	METAADD   = "add"       // metamod add baton operation
 	METAREM   = "rem"       // metamod rem baton operation
-	METAQUERY = "metaquery" // METAQUERY baton operation
+	METAQUERY = "metaquery" // metaquery baton operation
 	MKDIR     = "mkdir"     // mkdir baton operation
 	PUT       = "put"       // put baton operation
 	REMOVE    = "remove"    // rm baton operation
@@ -112,6 +113,41 @@ func (e *RodsError) Error() string {
 
 func (e *RodsError) Code() int32 {
 	return e.code
+}
+
+func FindBaton() (string, error) {
+	var baton string
+	var err error
+
+	envPath := os.Getenv("PATH")
+	dirs := strings.Split(envPath, ":")
+
+	dirs = append(dirs, "/home/keith/tmp/bin")
+
+	for _, dir := range dirs {
+		paths, err := filepath.Glob(filepath.Join(dir, "baton-do"))
+		if err != nil {
+			break
+		}
+
+		for _, path := range paths {
+			if filepath.Base(path) == "baton-do" {
+				baton = path
+				break
+			}
+		}
+	}
+
+	return baton, err
+}
+
+func FindAndStart(arg ...string) (*Client, error) {
+	baton, err := FindBaton()
+	if err != nil {
+		return nil, err
+	}
+
+	return Start(baton, arg...)
 }
 
 func Start(path string, arg ...string) (*Client, error) {
@@ -247,6 +283,8 @@ func (client *Client) Stop() error {
 	return client.cmd.Wait()
 }
 
+// Stop stops the baton sub-process, if it is running. Ignores any error
+// from the sub-process.
 func (client *Client) StopIgnoreError() {
 	if err := client.Stop(); err != nil {
 		logs.GetLogger().Error().Err(err).Msg("stopped client")
@@ -271,8 +309,12 @@ func (client *Client) IsRunning() bool {
 
 // Chmod sets permissions on a collection or data object. By setting
 // Recurse=true in Args, the operation may be made recursive.
-func (client *Client) Chmod(args Args, item RodsItem) ([]RodsItem, error) {
-	return client.execute(CHMOD, args, item)
+func (client *Client) Chmod(args Args, item RodsItem) (RodsItem, error) {
+	items, err := client.execute(CHMOD, args, item)
+	if err != nil {
+		return item, err
+	}
+	return items[0], err
 }
 
 // Checksum calculates a checksum for a data object. iRODS makes this a
@@ -280,12 +322,21 @@ func (client *Client) Chmod(args Args, item RodsItem) ([]RodsItem, error) {
 // setting Force=true in Args. When called, this sets or updates the checksums
 // on all replicates. If Checksum=true is set in Args, the new checksum will
 // be reported in the return value.
-func (client *Client) Checksum(args Args, item RodsItem) ([]RodsItem, error) {
-	return client.execute(CHECKSUM, args, item)
+func (client *Client) Checksum(args Args, item RodsItem) (RodsItem, error) {
+	items, err := client.execute(CHECKSUM, args, item)
+	if err != nil {
+		return item, err
+	}
+
+	return items[0], err
 }
 
-func (client *Client) Get(args Args, item RodsItem) ([]RodsItem, error) {
-	return client.execute(GET, args, item)
+func (client *Client) Get(args Args, item RodsItem) (RodsItem, error) {
+	items, err := client.execute(GET, args, item)
+	if err != nil {
+		return item, err
+	}
+	return items[0], err
 }
 
 // List retrieves information about a collection or data object. The items
@@ -309,18 +360,26 @@ func (client *Client) List(args Args, item RodsItem) ([]RodsItem, error) {
 	return client.execute(LIST, args, item)
 }
 
-func (client *Client) MetaMod(args Args, item RodsItem) ([]RodsItem, error) {
-	return client.execute(METAMOD, args, item)
+func (client *Client) metaMod(args Args, item RodsItem) (RodsItem, error) {
+	items, err := client.execute(METAMOD, args, item)
+	if err != nil {
+		return item, err
+	}
+	return items[0], err
 }
 
-func (client *Client) MetaAdd(args Args, item RodsItem) ([]RodsItem, error) {
+// MetaAdd adds the AVUs of the item to a collection or data object and returns
+// the item.
+func (client *Client) MetaAdd(args Args, item RodsItem) (RodsItem, error) {
 	args.Operation = METAADD
-	return client.MetaMod(args, item)
+	return client.metaMod(args, item)
 }
 
-func (client *Client) MetaRem(args Args, item RodsItem) ([]RodsItem, error) {
+// MetaRem removes the AVUs of the item from a collection or data object and
+// returns the item.
+func (client *Client) MetaRem(args Args, item RodsItem) (RodsItem, error) {
 	args.Operation = METAREM
-	return client.MetaMod(args, item)
+	return client.metaMod(args, item)
 }
 
 func (client *Client) MetaQuery(args Args, item RodsItem) ([]RodsItem, error) {
@@ -332,8 +391,12 @@ func (client *Client) MetaQuery(args Args, item RodsItem) ([]RodsItem, error) {
 	return client.execute(METAQUERY, args, item)
 }
 
-func (client *Client) MkDir(args Args, item RodsItem) ([]RodsItem, error) {
-	return client.execute(MKDIR, args, item)
+func (client *Client) MkDir(args Args, item RodsItem) (RodsItem, error) {
+	items, err := client.execute(MKDIR, args, item)
+	if err != nil {
+		return item, err
+	}
+	return items[0], err
 }
 
 func (client *Client) Put(args Args, item RodsItem) ([]RodsItem, error) {
@@ -357,7 +420,7 @@ func (client *Client) Archive(args Args, item RodsItem, checksum string) (
 				item.String())
 	}
 
-	items, perr := client.Put(Args{Checksum: true, Force: true}, item)
+	items, perr := client.Put(Args{Checksum: true, Force: true, AVU: true}, item)
 	if perr != nil {
 		return archived, perr
 	}
@@ -371,6 +434,11 @@ func (client *Client) Archive(args Args, item RodsItem, checksum string) (
 			errors.Errorf("failed to archive %s: local checksum '%s' "+
 				"did not match remote checksum '%s'",
 				item.String(), checksum, archived.IChecksum)
+	}
+
+	_, merr := client.ReplaceAVUs(archived, MakeCreationMetadata())
+	if merr != nil {
+		return archived, merr
 	}
 
 	return archived, nil
@@ -504,10 +572,10 @@ func (client *Client) send(envelope *Envelope) (*Envelope, error) {
 		return nil, err
 	}
 
-	log.Debug().Str("message", string(jsonMessage)).Msg("Sending")
+	log.Debug().Msgf("Sending %s", jsonMessage)
 	client.in <- jsonMessage
 	jsonResponse := <-client.out
-	log.Debug().Str("response", string(jsonResponse)).Msg("Received")
+	log.Debug().Msgf("Received %s", jsonResponse)
 
 	response := &Envelope{}
 	if err = json.Unmarshal(jsonResponse, response); err != nil {

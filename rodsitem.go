@@ -100,19 +100,36 @@ func (item *RodsItem) String() (s string) {
 	return s
 }
 
+func CopyRodsItem(item RodsItem) RodsItem {
+	return RodsItem{
+		client:      item.client,
+		IFile:       item.IFile,
+		IDirectory:  item.IDirectory,
+		IPath:       item.IPath,
+		IName:       item.IName,
+		IChecksum:   item.IChecksum,
+		ISize:       item.ISize,
+		IACLs:       item.IACLs,
+		IAVUs:       item.IAVUs,
+		IContents:   item.IContents,
+		IReplicates: item.IReplicates,
+		ITimestamps: item.ITimestamps,
+	}
+}
+
 func Unwrap(items []RodsItem) (RodsItem, error) {
 	var item RodsItem
 
 	switch len(items) {
 	case 0:
 		return item,
-		errors.New("cannot unwrap from an empty array")
+			errors.New("cannot unwrap from an empty array")
 	case 1:
 		return items[0], nil
 	default:
 		return item,
-		errors.Errorf("cannot unwrap from an array with %d members",
-			len(items))
+			errors.Errorf("cannot unwrap from an array with %d members",
+				len(items))
 	}
 }
 
@@ -191,9 +208,14 @@ func (a AVUArr) Swap(i, j int) {
 }
 
 func (a AVUArr) Less(i, j int) bool {
-	return a[i].Attr < a[j].Attr ||
-		a[i].Value < a[i].Value ||
-		a[i].Units < a[j].Units
+	// return a[i].Attr < a[j].Attr ||
+	// 	a[i].Value < a[i].Value ||
+	// 	a[i].Units < a[j].Units
+	return AVULess(a[i], a[j])
+}
+
+func AVULess(x AVU, y AVU) bool {
+	return x.Attr < y.Attr || x.Value < y.Value || x.Units < y.Units
 }
 
 // Number is a data object replicate

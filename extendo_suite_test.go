@@ -16,8 +16,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-const batonExecutable = "baton-do"
-
 var batonArgs = []string{"--unbuffered"}
 
 var dirPaths = []string{
@@ -41,7 +39,7 @@ var filePaths = []string{
 }
 
 func TestExtendo(t *testing.T) {
-	log := dlog.New(GinkgoWriter, logs.WarnLevel)
+	log := dlog.New(GinkgoWriter, logs.DebugLevel)
 	logs.InstallLogger(log)
 
 	RegisterFailHandler(Fail)
@@ -55,7 +53,7 @@ var _ = Describe("Start and stop the Item client", func() {
 	)
 
 	BeforeEach(func() {
-		client, err = ex.Start(batonExecutable, batonArgs...)
+		client, err = ex.FindAndStart(batonArgs...)
 	})
 
 	Describe("Stop and start", func() {
@@ -100,7 +98,7 @@ var _ = Describe("List an iRODS path", func() {
 	)
 
 	BeforeEach(func() {
-		client, err = ex.Start(batonExecutable, batonArgs...)
+		client, err = ex.FindAndStart(batonArgs...)
 		Expect(err).NotTo(HaveOccurred())
 
 		rootColl = "/testZone/home/irods"
@@ -108,12 +106,6 @@ var _ = Describe("List an iRODS path", func() {
 
 		err = putTestData("testdata/", workColl)
 		Expect(err).NotTo(HaveOccurred())
-
-		testColl = ex.RodsItem{
-			IPath: filepath.Join(workColl, "testdata")}
-		testObj = ex.RodsItem{
-			IPath: filepath.Join(workColl, "testdata/1/reads/fast5"),
-			IName: "reads1.fast5"}
 	})
 
 	AfterEach(func() {
@@ -144,6 +136,10 @@ var _ = Describe("List an iRODS path", func() {
 	})
 
 	When("the item is a collection", func() {
+		BeforeEach(func() {
+			testColl = ex.RodsItem{IPath: filepath.Join(workColl, "testdata")}
+		})
+
 		It("should return a RodsItem with that path", func() {
 			items, err := client.List(ex.Args{}, testColl)
 			Expect(err).NotTo(HaveOccurred())
@@ -152,35 +148,47 @@ var _ = Describe("List an iRODS path", func() {
 			Expect(items[0].IPath).To(Equal(testColl.IPath))
 		})
 
-		It("should return contents if requested", func() {
-			items, err := client.List(ex.Args{Contents: true}, testColl)
-			Expect(err).NotTo(HaveOccurred())
+		When("contents are requested", func() {
+			It("should return contents", func() {
+				items, err := client.List(ex.Args{Contents: true}, testColl)
+				Expect(err).NotTo(HaveOccurred())
 
-			Expect(len(items)).To(Equal(1))
-			contents := items[0].IContents
-			Expect(contents).To(Equal([]ex.RodsItem{
-				{IPath: filepath.Join(testColl.IPath, "1")},
-				{IPath: filepath.Join(testColl.IPath, "testdir")},
-			}))
+				Expect(len(items)).To(Equal(1))
+				contents := items[0].IContents
+				Expect(contents).To(Equal([]ex.RodsItem{
+					{IPath: filepath.Join(testColl.IPath, "1")},
+					{IPath: filepath.Join(testColl.IPath, "testdir")},
+				}))
+			})
 		})
 
-		It("should have metadata if requested", func() {
-			items, err := client.List(ex.Args{AVU: true}, testColl)
-			Expect(err).NotTo(HaveOccurred())
+		When("metadata are requested", func() {
+			BeforeEach(func() {
+				testColl.IAVUs = []ex.AVU{{Attr: "test_attr_x", Value: "y"}}
+				_, err = client.MetaAdd(ex.Args{}, testColl)
+				Expect(err).NotTo(HaveOccurred())
+			})
 
-			Expect(len(items)).To(Equal(1))
-			metadata := items[0].IAVUs
-			Expect(metadata).To(Equal([]ex.AVU{{Attr: "x", Value: "y"}}))
+			It("should have metadata", func() {
+				items, err := client.List(ex.Args{AVU: true}, testColl)
+				Expect(err).NotTo(HaveOccurred())
+
+				Expect(len(items)).To(Equal(1))
+				metadata := items[0].IAVUs
+				Expect(metadata).To(Equal([]ex.AVU{{Attr: "test_attr_x", Value: "y"}}))
+			})
 		})
 
-		It("should have ACLs if requested", func() {
-			items, err := client.List(ex.Args{ACL: true}, testColl)
-			Expect(err).NotTo(HaveOccurred())
+		When("ACLs are requested", func() {
+			It("should have ACLs if requested", func() {
+				items, err := client.List(ex.Args{ACL: true}, testColl)
+				Expect(err).NotTo(HaveOccurred())
 
-			Expect(len(items)).To(Equal(1))
-			acls := items[0].IACLs
-			Expect(acls).To(Equal([]ex.ACL{{Owner: "irods",
-				Level: "own", Zone: "testZone"}}))
+				Expect(len(items)).To(Equal(1))
+				acls := items[0].IACLs
+				Expect(acls).To(Equal([]ex.ACL{{Owner: "irods",
+					Level: "own", Zone: "testZone"}}))
+			})
 		})
 
 		When("contents are recursed", func() {
@@ -210,6 +218,12 @@ var _ = Describe("List an iRODS path", func() {
 	})
 
 	When("the item is a data object", func() {
+		BeforeEach(func() {
+			testObj = ex.RodsItem{
+				IPath: filepath.Join(workColl, "testdata/1/reads/fast5"),
+				IName: "reads1.fast5"}
+		})
+
 		It("should return a RodsItem with that path and name", func() {
 			items, err := client.List(ex.Args{}, testObj)
 			Expect(err).NotTo(HaveOccurred())
@@ -262,17 +276,28 @@ var _ = Describe("List an iRODS path", func() {
 				To(BeTemporally("~", time.Now(), time.Minute))
 		})
 
-		It("should have metadata if requested", func() {
-			items, err := client.List(ex.Args{AVU: true}, testObj)
-			Expect(err).NotTo(HaveOccurred())
+		When("metadata are requested", func() {
+			BeforeEach(func() {
+				testObj.IAVUs = []ex.AVU{
+					{Attr: "test_attr_a", Value: "1"},
+					{Attr: "test_attr_b", Value: "2"},
+					{Attr: "test_attr_c", Value: "3"}}
+				_, err = client.MetaAdd(ex.Args{}, testObj)
+				Expect(err).NotTo(HaveOccurred())
+			})
 
-			Expect(len(items)).To(Equal(1))
-			metadata := items[0].IAVUs
+			It("should have metadata", func() {
+				items, err := client.List(ex.Args{AVU: true}, testObj)
+				Expect(err).NotTo(HaveOccurred())
 
-			Expect(metadata).To(Equal([]ex.AVU{
-				{Attr: "a", Value: "1"},
-				{Attr: "b", Value: "2"},
-				{Attr: "c", Value: "3"}}))
+				Expect(len(items)).To(Equal(1))
+				metadata := items[0].IAVUs
+
+				Expect(metadata).To(Equal([]ex.AVU{
+					{Attr: "test_attr_a", Value: "1"},
+					{Attr: "test_attr_b", Value: "2"},
+					{Attr: "test_attr_c", Value: "3"}}))
+			})
 		})
 
 		It("should have ACLs if requested", func() {
@@ -301,7 +326,7 @@ var _ = Describe("Put a file into iRODS", func() {
 	)
 
 	BeforeEach(func() {
-		client, err = ex.Start(batonExecutable, batonArgs...)
+		client, err = ex.FindAndStart(batonArgs...)
 		Expect(err).NotTo(HaveOccurred())
 
 		rootColl = "/testZone/home/irods"
@@ -379,7 +404,7 @@ var _ = Describe("Put a directory into iRODS", func() {
 	)
 
 	BeforeEach(func() {
-		client, err = ex.Start(batonExecutable, batonArgs...)
+		client, err = ex.FindAndStart(batonArgs...)
 		Expect(err).NotTo(HaveOccurred())
 
 		rootColl = "/testZone/home/irods"
@@ -455,7 +480,7 @@ var _ = Describe("Add access permissions", func() {
 	)
 
 	BeforeEach(func() {
-		client, err = ex.Start(batonExecutable, batonArgs...)
+		client, err = ex.FindAndStart(batonArgs...)
 		Expect(err).NotTo(HaveOccurred())
 
 		rootColl = "/testZone/home/irods"
@@ -487,7 +512,7 @@ var _ = Describe("Add access permissions", func() {
 				Expect(items[0].IACLs).NotTo(ContainElement(publicRead))
 
 				testColl.IACLs = []ex.ACL{publicRead}
-				items, err = client.Chmod(ex.Args{}, testColl)
+				_, err = client.Chmod(ex.Args{}, testColl)
 				Expect(err).NotTo(HaveOccurred())
 
 				items, err = client.List(ex.Args{ACL: true}, testColl)
@@ -510,7 +535,7 @@ var _ = Describe("Add access permissions", func() {
 				Expect(items[0].IACLs).NotTo(ContainElement(publicRead))
 
 				testObj.IACLs = []ex.ACL{publicRead}
-				items, err = client.Chmod(ex.Args{}, testObj)
+				_, err = client.Chmod(ex.Args{}, testObj)
 				Expect(err).NotTo(HaveOccurred())
 
 				items, err = client.List(ex.Args{ACL: true}, testObj)
@@ -539,7 +564,7 @@ var _ = Describe("Remove access permissions", func() {
 	)
 
 	BeforeEach(func() {
-		client, err = ex.Start(batonExecutable, batonArgs...)
+		client, err = ex.FindAndStart(batonArgs...)
 		Expect(err).NotTo(HaveOccurred())
 
 		rootColl = "/testZone/home/irods"
@@ -578,7 +603,7 @@ var _ = Describe("Remove access permissions", func() {
 				Expect(items[0].IACLs).To(ContainElement(publicRead))
 
 				testColl.IACLs = []ex.ACL{publicNull}
-				items, err = client.Chmod(ex.Args{}, testColl)
+				_, err = client.Chmod(ex.Args{}, testColl)
 				Expect(err).NotTo(HaveOccurred())
 
 				items, err = client.List(ex.Args{ACL: true}, testColl)
@@ -601,7 +626,7 @@ var _ = Describe("Remove access permissions", func() {
 				Expect(items[0].IACLs).To(ContainElement(publicRead))
 
 				testObj.IACLs = []ex.ACL{publicNull}
-				items, err = client.Chmod(ex.Args{}, testObj)
+				_, err = client.Chmod(ex.Args{}, testObj)
 				Expect(err).NotTo(HaveOccurred())
 
 				items, err = client.List(ex.Args{ACL: true}, testObj)
@@ -624,7 +649,7 @@ var _ = Describe("Metadata query", func() {
 	)
 
 	BeforeEach(func() {
-		client, err = ex.Start(batonExecutable, batonArgs...)
+		client, err = ex.FindAndStart(batonArgs...)
 		Expect(err).NotTo(HaveOccurred())
 
 		rootColl = "/testZone/home/irods"
@@ -645,30 +670,52 @@ var _ = Describe("Metadata query", func() {
 		It("should raise an error", func() {
 			var emptyArgs = ex.Args{}
 			_, err := client.MetaQuery(emptyArgs,
-				ex.RodsItem{IAVUs: []ex.AVU{{Attr: "a", Value: "1"}}})
+				ex.RodsItem{IAVUs: []ex.AVU{{Attr: "test_attr_a", Value: "1"}}})
 			Expect(err).To(HaveOccurred())
 		})
 	})
 
 	Context("querying collections", func() {
+		BeforeEach(func() {
+			testColl := ex.RodsItem{
+				IPath: filepath.Join(workColl, "testdata")}
+			testColl.IAVUs = []ex.AVU{{Attr: "test_attr_x", Value: "y"}}
+			_, err = client.MetaAdd(ex.Args{}, testColl)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
 		When("a query is run", func() {
 			It("should return collections", func() {
 				items, err := client.MetaQuery(ex.Args{Collection: true},
-					ex.RodsItem{IAVUs: []ex.AVU{{Attr: "x", Value: "y"}}})
+					ex.RodsItem{IAVUs: []ex.AVU{{Attr: "test_attr_x", Value: "y"}}})
 				Expect(err).NotTo(HaveOccurred())
 
-				coll := ex.RodsItem{IPath: filepath.Join(workColl, "testdata")}
-				Expect(len(items)).To(Equal(1))
-				Expect(items[0]).To(Equal(coll))
+				expected :=
+					[]ex.RodsItem{{IPath: filepath.Join(workColl, "testdata")}}
+				Expect(items).To(Equal(expected))
+				Expect(items[0].IsCollection()).To(BeTrue())
 			})
 		})
 	})
 
 	Context("querying data objects", func() {
+		BeforeEach(func() {
+			testColl := ex.RodsItem{
+				IPath: filepath.Join(workColl, "testdata")}
+			items, err := client.List(ex.Args{Recurse: true}, testColl)
+			Expect(err).NotTo(HaveOccurred())
+
+			for _, item := range items {
+				item.IAVUs = []ex.AVU{{Attr: "test_attr_a", Value: "1"}}
+				_, err = client.MetaAdd(ex.Args{}, item)
+			}
+			Expect(err).NotTo(HaveOccurred())
+		})
+
 		When("a query is run", func() {
 			It("should return data objects", func() {
 				items, err := client.MetaQuery(ex.Args{Object: true},
-					ex.RodsItem{IAVUs: []ex.AVU{{Attr: "a", Value: "1"}}})
+					ex.RodsItem{IAVUs: []ex.AVU{{Attr: "test_attr_a", Value: "1"}}})
 				Expect(err).NotTo(HaveOccurred())
 
 				var expected []ex.RodsItem
@@ -705,7 +752,7 @@ var _ = Describe("Add metadata", func() {
 	)
 
 	BeforeEach(func() {
-		client, err = ex.Start(batonExecutable, batonArgs...)
+		client, err = ex.FindAndStart(batonArgs...)
 		Expect(err).NotTo(HaveOccurred())
 
 		rootColl = "/testZone/home/irods"
@@ -739,7 +786,10 @@ var _ = Describe("Add metadata", func() {
 				Expect(items[0].IAVUs).NotTo(ContainElement(newAVU))
 
 				testColl.IAVUs = []ex.AVU{newAVU}
-				items, err = client.MetaAdd(ex.Args{}, testColl)
+				_, err = client.MetaAdd(ex.Args{}, testColl)
+				Expect(err).NotTo(HaveOccurred())
+
+				items, err = client.List(ex.Args{AVU: true}, testColl)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(items[0].IAVUs).To(ContainElement(newAVU))
 			})
@@ -757,12 +807,77 @@ var _ = Describe("Add metadata", func() {
 				Expect(items[0].IAVUs).NotTo(ContainElement(newAVU))
 
 				testObj.IAVUs = []ex.AVU{newAVU}
-				items, err = client.MetaAdd(ex.Args{}, testObj)
+				_, err = client.MetaAdd(ex.Args{}, testObj)
+				Expect(err).NotTo(HaveOccurred())
+
+				items, err = client.List(ex.Args{AVU: true}, testObj)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(items[0].IAVUs).To(ContainElement(newAVU))
 			})
 		})
 	})
+})
+
+var _ = Describe("Replace metadata", func() {
+	var (
+		client *ex.Client
+		err    error
+
+		rootColl string
+		workColl string
+
+		testObj ex.RodsItem
+
+		avuA0, avuA1, avuA2, avuB0, avuB1 ex.AVU
+	)
+
+	BeforeEach(func() {
+		client, err = ex.FindAndStart(batonArgs...)
+		Expect(err).NotTo(HaveOccurred())
+
+		rootColl = "/testZone/home/irods"
+		workColl = tmpRodsPath(rootColl, "ExtendoReplace")
+
+		err = putTestData("testdata/", workColl)
+		Expect(err).NotTo(HaveOccurred())
+
+		testObj = ex.RodsItem{
+			IPath: filepath.Join(workColl, "testdata/1/reads/fast5"),
+			IName: "reads1.fast5"}
+
+		avuA0 = ex.MakeAVU("a", "0", "z")
+		avuA1 = ex.MakeAVU("a", "1")
+		avuA2 = ex.MakeAVU("a", "2", "z")
+
+		avuB0 = ex.MakeAVU("b", "0", "z")
+		avuB1 = ex.MakeAVU("b", "1", "z")
+
+		testObj.IAVUs = []ex.AVU{avuA0, avuA1, avuA2, avuB0, avuB1}
+		_, err := client.MetaAdd(ex.Args{}, testObj)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	AfterEach(func() {
+		err = removeTestData(workColl)
+		Expect(err).NotTo(HaveOccurred())
+
+		client.StopIgnoreError()
+	})
+
+	Context("replacing metadata on data objects", func() {
+		When("it shares attributes with existing metadata", func() {
+			It("should be added", func() {
+				newAVU := ex.MakeAVU("a", "nvalue", "nunits")
+				_, err := client.ReplaceAVUs(testObj, []ex.AVU{newAVU})
+				Expect(err).NotTo(HaveOccurred())
+
+				updated, err := client.List(ex.Args{AVU: true}, testObj)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(updated[0].IAVUs).To(Equal([]ex.AVU{newAVU, avuB0, avuB1}))
+			})
+		})
+	})
+
 })
 
 var _ = Describe("Archive a file to iRODS", func() {
@@ -774,14 +889,14 @@ var _ = Describe("Archive a file to iRODS", func() {
 		workColl string
 
 		existingObject ex.RodsItem
-		testObject     ex.RodsItem
+		testObj        ex.RodsItem
 
 		testChecksum = "1181c1834012245d785120e3505ed169"
 		newChecksum  = "348bd3ce10ec00ecc29d31ec97cd5839"
 	)
 
 	BeforeEach(func() {
-		client, err = ex.Start(batonExecutable, batonArgs...)
+		client, err = ex.FindAndStart(batonArgs...)
 		Expect(err).NotTo(HaveOccurred())
 
 		rootColl = "/testZone/home/irods"
@@ -794,7 +909,7 @@ var _ = Describe("Archive a file to iRODS", func() {
 		Expect(err).NotTo(HaveOccurred())
 		objFile := "reads99.fast5"
 
-		testObject = ex.RodsItem{IDirectory: objDir,
+		testObj = ex.RodsItem{IDirectory: objDir,
 			IFile: "reads1.fast5",
 			IPath: workColl, IName: objFile}
 
@@ -815,17 +930,17 @@ var _ = Describe("Archive a file to iRODS", func() {
 		When("a new data object", func() {
 			When("the testChecksum is matched", func() {
 				It("should be present in iRODS afterwards", func() {
-					item, err := client.Archive(ex.Args{}, testObject, testChecksum)
+					item, err := client.Archive(ex.Args{}, testObj, testChecksum)
 					Expect(err).NotTo(HaveOccurred())
 
 					items, err := client.List(ex.Args{}, item)
 					Expect(err).NotTo(HaveOccurred())
-					Expect(items[0].IPath).To(Equal(testObject.IPath))
-					Expect(items[0].IName).To(Equal(testObject.IName))
+					Expect(items[0].IPath).To(Equal(testObj.IPath))
+					Expect(items[0].IName).To(Equal(testObj.IName))
 				})
 
 				It("should return the testChecksum", func() {
-					item, err := client.Archive(ex.Args{}, testObject, testChecksum)
+					item, err := client.Archive(ex.Args{}, testObj, testChecksum)
 					Expect(err).NotTo(HaveOccurred())
 					Expect(item.IChecksum).To(Equal(testChecksum))
 				})
@@ -833,7 +948,7 @@ var _ = Describe("Archive a file to iRODS", func() {
 
 			When("the testChecksum is mismatched", func() {
 				It("archiving should fail", func() {
-					_, err := client.Archive(ex.Args{}, testObject,
+					_, err := client.Archive(ex.Args{}, testObj,
 						"no_such_checksum")
 					Expect(err).To(HaveOccurred())
 				})
@@ -877,7 +992,7 @@ func putTestData(src string, dst string) error {
 	src = filepath.Clean(src)
 	dst = filepath.Clean(dst)
 
-	client, err := ex.Start(batonExecutable, "--unbuffered")
+	client, err := ex.FindAndStart("--unbuffered")
 	if err != nil {
 		return err
 	}
@@ -887,28 +1002,8 @@ func putTestData(src string, dst string) error {
 		return err
 	}
 
-	items, err := client.Put(ex.Args{Recurse: true, Checksum: true},
+	_, err = client.Put(ex.Args{Recurse: true, Checksum: true},
 		ex.RodsItem{IDirectory: src, IPath: dst})
-	if err != nil {
-		return err
-	}
-
-	for _, item := range items {
-		item.IAVUs = []ex.AVU{
-			{Attr: "a", Value: "1"},
-			{Attr: "b", Value: "2"},
-			{Attr: "c", Value: "3"}}
-
-		_, err := client.MetaMod(ex.Args{Operation: "add"}, item)
-		if err != nil {
-			return err
-		}
-	}
-
-	coll := ex.RodsItem{IPath: filepath.Join(dst, "testdata")}
-	coll.IAVUs = []ex.AVU{{Attr: "x", Value: "y"}}
-
-	_, err = client.MetaMod(ex.Args{Operation: "add"}, coll)
 	if err != nil {
 		return err
 	}
@@ -917,7 +1012,7 @@ func putTestData(src string, dst string) error {
 }
 
 func removeTestData(dst string) error {
-	client, err := ex.Start(batonExecutable, "--unbuffered")
+	client, err := ex.FindAndStart("--unbuffered")
 	if err != nil {
 		return err
 	}
