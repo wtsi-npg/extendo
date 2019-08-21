@@ -122,6 +122,7 @@ func FindBaton() (string, error) {
 	envPath := os.Getenv("PATH")
 	dirs := strings.Split(envPath, ":")
 
+	// FIXME: remove this
 	dirs = append(dirs, "/home/keith/tmp/bin")
 
 	for _, dir := range dirs {
@@ -319,7 +320,7 @@ func (client *Client) Chmod(args Args, item RodsItem) (RodsItem, error) {
 
 // Checksum calculates a checksum for a data object. iRODS makes this a
 // no-op if a checksum is already recorded. However, this can be overridden by
-// setting Force=true in Args. When called, this sets or updates the checksums
+// setting Force=true in Args. When called, this sets or updates the checksum
 // on all replicates. If Checksum=true is set in Args, the new checksum will
 // be reported in the return value.
 func (client *Client) Checksum(args Args, item RodsItem) (RodsItem, error) {
@@ -339,7 +340,7 @@ func (client *Client) Get(args Args, item RodsItem) (RodsItem, error) {
 	return items[0], err
 }
 
-// List retrieves information about a collection or data object. The items
+// List retrieves information about collections and/or data objects. The items
 // returned are sorted as a RodsItemArr (collections first, then by path and
 // finally by name). The detailed composition of the items is influenced by the
 // supplied Args:
@@ -358,6 +359,32 @@ func (client *Client) List(args Args, item RodsItem) ([]RodsItem, error) {
 	}
 
 	return client.execute(LIST, args, item)
+}
+
+// ListItem retrieves information about an individual collection or data
+// object. The effects of Args are the same as for List, except that Recurse is
+// not permitted. If the listed item does not exist, an error is returned. If
+// the operation would return more than one collection or data object, an error
+// is returned.
+func (client *Client) ListItem(args Args, item RodsItem) (RodsItem, error) {
+	if args.Recurse {
+		return item, errors.New("invalid argument: Recurse=true")
+	}
+
+	items, err := client.execute(LIST, args, item)
+	if err != nil {
+		return item, err
+	}
+
+	switch len(items) {
+	case 0:
+		return item, errors.Errorf("no such item: %+v", item)
+	case 1:
+		return items[0], err
+	default:
+		return item, errors.Errorf("attempt to ListItem multiple "+
+			"items: %+v", items)
+	}
 }
 
 func (client *Client) metaMod(args Args, item RodsItem) (RodsItem, error) {
