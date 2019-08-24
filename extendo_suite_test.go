@@ -171,50 +171,50 @@ var _ = Describe("List an iRODS path", func() {
 				})
 
 				It("should have metadata", func() {
-				items, err := client.List(ex.Args{AVU: true}, testColl)
-				Expect(err).NotTo(HaveOccurred())
+					items, err := client.List(ex.Args{AVU: true}, testColl)
+					Expect(err).NotTo(HaveOccurred())
 
-				Expect(len(items)).To(Equal(1))
-				metadata := items[0].IAVUs
-				Expect(metadata).To(Equal([]ex.AVU{{Attr: "test_attr_x", Value: "y"}}))
-			})
+					Expect(len(items)).To(Equal(1))
+					metadata := items[0].IAVUs
+					Expect(metadata).To(Equal([]ex.AVU{{Attr: "test_attr_x", Value: "y"}}))
+				})
 			})
 
 			When("ACLs are requested", func() {
 				It("should have ACLs if requested", func() {
-				items, err := client.List(ex.Args{ACL: true}, testColl)
-				Expect(err).NotTo(HaveOccurred())
+					items, err := client.List(ex.Args{ACL: true}, testColl)
+					Expect(err).NotTo(HaveOccurred())
 
-				Expect(len(items)).To(Equal(1))
-				acls := items[0].IACLs
-				Expect(acls).To(Equal([]ex.ACL{{Owner: "irods",
-					Level: "own", Zone: "testZone"}}))
-			})
+					Expect(len(items)).To(Equal(1))
+					acls := items[0].IACLs
+					Expect(acls).To(Equal([]ex.ACL{{Owner: "irods",
+						Level: "own", Zone: "testZone"}}))
+				})
 			})
 
 			When("contents are recursed", func() {
 				It("should return a recursive slice of contents", func() {
-				items, err := client.List(ex.Args{Recurse: true}, testColl)
-				Expect(err).NotTo(HaveOccurred())
+					items, err := client.List(ex.Args{Recurse: true}, testColl)
+					Expect(err).NotTo(HaveOccurred())
 
-				var expected []ex.RodsItem
-				for _, dirPath := range dirPaths {
-					expected = append(expected,
-						ex.RodsItem{
-							IPath: filepath.Join(workColl, dirPath)})
-				}
+					var expected []ex.RodsItem
+					for _, dirPath := range dirPaths {
+						expected = append(expected,
+							ex.RodsItem{
+								IPath: filepath.Join(workColl, dirPath)})
+					}
 
-				for _, filePath := range filePaths {
-					objPath := filepath.Join(workColl, filePath)
-					expected = append(expected,
-						ex.RodsItem{
-							IPath: filepath.Dir(objPath),
-							IName: filepath.Base(objPath)},
-					)
-				}
+					for _, filePath := range filePaths {
+						objPath := filepath.Join(workColl, filePath)
+						expected = append(expected,
+							ex.RodsItem{
+								IPath: filepath.Dir(objPath),
+								IName: filepath.Base(objPath)},
+						)
+					}
 
-				Expect(items).To(Equal(expected))
-			})
+					Expect(items).To(Equal(expected))
+				})
 			})
 		})
 
@@ -227,7 +227,7 @@ var _ = Describe("List an iRODS path", func() {
 
 			When("a recursive list are requested", func() {
 				It("should raise an error", func() {
-					_, err := client.ListItem(ex.Args{Recurse:true}, testColl)
+					_, err := client.ListItem(ex.Args{Recurse: true}, testColl)
 					Expect(err).To(HaveOccurred())
 
 					Expect(err).To(MatchError("invalid argument: " +
@@ -252,50 +252,50 @@ var _ = Describe("List an iRODS path", func() {
 			})
 
 			It("should have a checksum if requested", func() {
-			items, err := client.List(ex.Args{Checksum: true}, testObj)
-			Expect(err).NotTo(HaveOccurred())
+				items, err := client.List(ex.Args{Checksum: true}, testObj)
+				Expect(err).NotTo(HaveOccurred())
 
-			Expect(len(items)).To(Equal(1))
-			Expect(items[0].IChecksum).To(Equal(testChecksum))
-		})
+				Expect(len(items)).To(Equal(1))
+				Expect(items[0].IChecksum).To(Equal(testChecksum))
+			})
 
 			It("should have a size if requested", func() {
-			items, err := client.List(ex.Args{Size: true}, testObj)
-			Expect(err).NotTo(HaveOccurred())
+				items, err := client.List(ex.Args{Size: true}, testObj)
+				Expect(err).NotTo(HaveOccurred())
 
-			var expected uint64 = 4
-			Expect(len(items)).To(Equal(1))
-			Expect(items[0].ISize).To(Equal(expected))
-		})
+				var expected uint64 = 4
+				Expect(len(items)).To(Equal(1))
+				Expect(items[0].ISize).To(Equal(expected))
+			})
 
 			It("should have replicate information if requested", func() {
-			items, err := client.List(ex.Args{Replicate: true}, testObj)
-			Expect(err).NotTo(HaveOccurred())
+				items, err := client.List(ex.Args{Replicate: true}, testObj)
+				Expect(err).NotTo(HaveOccurred())
 
-			Expect(len(items)).To(Equal(1))
-			reps := items[0].IReplicates
-			Expect(len(reps)).To(Equal(1))
+				Expect(len(items)).To(Equal(1))
+				reps := items[0].IReplicates
+				Expect(len(reps)).To(Equal(1))
 
-			Expect(reps[0]).To(Equal(ex.Replicate{
-				Resource: "demoResc",
-				Location: "localhost",
-				Checksum: testChecksum,
-				Valid:    true}))
-		})
+				Expect(reps[0]).To(Equal(ex.Replicate{
+					Resource: "demoResc",
+					Location: "localhost",
+					Checksum: testChecksum,
+					Valid:    true}))
+			})
 
 			It("should have timestamp information if requested", func() {
-			items, err := client.List(ex.Args{Timestamp: true}, testObj)
-			Expect(err).NotTo(HaveOccurred())
+				items, err := client.List(ex.Args{Timestamp: true}, testObj)
+				Expect(err).NotTo(HaveOccurred())
 
-			Expect(len(items)).To(Equal(1))
-			stamps := items[0].ITimestamps
-			Expect(len(stamps)).To(Equal(2))
+				Expect(len(items)).To(Equal(1))
+				stamps := items[0].ITimestamps
+				Expect(len(stamps)).To(Equal(2))
 
-			Expect(stamps[0].Created).
-				To(BeTemporally("~", time.Now(), time.Minute))
-			Expect(stamps[1].Modified).
-				To(BeTemporally("~", time.Now(), time.Minute))
-		})
+				Expect(stamps[0].Created).
+					To(BeTemporally("~", time.Now(), time.Minute))
+				Expect(stamps[1].Modified).
+					To(BeTemporally("~", time.Now(), time.Minute))
+			})
 
 			When("metadata are requested", func() {
 				BeforeEach(func() {
@@ -308,28 +308,28 @@ var _ = Describe("List an iRODS path", func() {
 				})
 
 				It("should have metadata", func() {
-				items, err := client.List(ex.Args{AVU: true}, testObj)
-				Expect(err).NotTo(HaveOccurred())
+					items, err := client.List(ex.Args{AVU: true}, testObj)
+					Expect(err).NotTo(HaveOccurred())
 
-				Expect(len(items)).To(Equal(1))
-				metadata := items[0].IAVUs
+					Expect(len(items)).To(Equal(1))
+					metadata := items[0].IAVUs
 
-				Expect(metadata).To(Equal([]ex.AVU{
-					{Attr: "test_attr_a", Value: "1"},
-					{Attr: "test_attr_b", Value: "2"},
-					{Attr: "test_attr_c", Value: "3"}}))
-			})
+					Expect(metadata).To(Equal([]ex.AVU{
+						{Attr: "test_attr_a", Value: "1"},
+						{Attr: "test_attr_b", Value: "2"},
+						{Attr: "test_attr_c", Value: "3"}}))
+				})
 			})
 
 			It("should have ACLs if requested", func() {
-			items, err := client.List(ex.Args{ACL: true}, testObj)
-			Expect(err).NotTo(HaveOccurred())
+				items, err := client.List(ex.Args{ACL: true}, testObj)
+				Expect(err).NotTo(HaveOccurred())
 
-			Expect(len(items)).To(Equal(1))
-			acls := items[0].IACLs
-			Expect(acls).To(Equal([]ex.ACL{{Owner: "irods",
-				Level: "own", Zone: "testZone"}}))
-		})
+				Expect(len(items)).To(Equal(1))
+				acls := items[0].IACLs
+				Expect(acls).To(Equal([]ex.ACL{{Owner: "irods",
+					Level: "own", Zone: "testZone"}}))
+			})
 		})
 
 		Context("a single item is requested", func() {
@@ -405,9 +405,6 @@ var _ = Describe("Put a file into iRODS", func() {
 
 			item, err := client.ListItem(ex.Args{Checksum: true}, items[0])
 			Expect(err).NotTo(HaveOccurred())
-
-			Skip("List auto-creates a checksum, so we can't test " +
-				"for checksum creation with it. Is there an alternative?")
 			Expect(item.IChecksum).To(Equal(""))
 		})
 
@@ -416,11 +413,8 @@ var _ = Describe("Put a file into iRODS", func() {
 				items, err := client.Put(ex.Args{Checksum: true}, testObj)
 				Expect(err).NotTo(HaveOccurred())
 
-				item, err := client.ListItem(ex.Args{Checksum:true}, items[0])
+				item, err := client.ListItem(ex.Args{Checksum: true}, items[0])
 				Expect(err).NotTo(HaveOccurred())
-
-				Skip("List auto-creates a checksum, so we can't test " +
-					"for checksum creation with it. Is there an alternative?")
 				Expect(item.IChecksum).To(Equal(testChecksum))
 			})
 		})
@@ -561,9 +555,6 @@ var _ = Describe("Calculate a data object checksum", func() {
 
 			item, err := client.ListItem(ex.Args{Checksum: true}, testObj)
 			Expect(err).NotTo(HaveOccurred())
-
-			Skip("List auto-creates a checksum, so we can't test " +
-				"for checksum creation with it. Is there an alternative?")
 
 			_, err = client.Checksum(ex.Args{}, testObj)
 			item, err = client.ListItem(ex.Args{Checksum: true}, testObj)
@@ -1059,10 +1050,9 @@ var _ = Describe("Archive a file to iRODS", func() {
 					Expect(err).To(HaveOccurred())
 
 					Expect(err).To(MatchError(fmt.Sprintf(
-						"failed to archive %s: " +
-							"local checksum '%s' " +
+						"failed to archive %s: local checksum '%s' "+
 							"did not match remote checksum '%s'",
-							testObj.RodsPath(), dummyChecksum, testChecksum)))
+						testObj.RodsPath(), dummyChecksum, testChecksum)))
 				})
 			})
 		})
@@ -1089,7 +1079,7 @@ var _ = Describe("Archive a file to iRODS", func() {
 						existingObject, newChecksum)
 					Expect(err).NotTo(HaveOccurred())
 
-					item, err := client.ListItem(ex.Args{Checksum:true},
+					item, err := client.ListItem(ex.Args{Checksum: true},
 						existingObject)
 					Expect(err).NotTo(HaveOccurred())
 
@@ -1106,7 +1096,7 @@ var _ = Describe("Archive a file to iRODS", func() {
 			_, err := client.Archive(ex.Args{}, coll, "")
 			Expect(err).To(HaveOccurred())
 
-			Expect(err).To(MatchError(fmt.Sprintf("cannot archive %s " +
+			Expect(err).To(MatchError(fmt.Sprintf("cannot archive %s "+
 				"as it is not a file", coll.RodsPath())))
 		})
 	})
