@@ -65,6 +65,14 @@ var _ = Describe("Start and stop the Item client", func() {
 			It("should be running", func() {
 				Expect(client.IsRunning()).To(BeTrue())
 			})
+
+			When("Start is attempted", func() {
+				It("should return an error", func() {
+					_, err := client.Start()
+					Expect(err).To(HaveOccurred())
+					Expect(err).To(MatchError("client is already running"))
+				})
+			})
 		})
 
 		Context("When the client is running", func() {

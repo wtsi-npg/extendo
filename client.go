@@ -115,6 +115,9 @@ func (e *RodsError) Code() int32 {
 	return e.code
 }
 
+// FindBaton returns the cleaned path to the first occurrence of the baton-do
+// executable in the environment's PATH. If the executable is not found, an
+// error is raised.
 func FindBaton() (string, error) {
 	var baton string
 	var err error
@@ -135,28 +138,55 @@ func FindBaton() (string, error) {
 			}
 		}
 	}
+	if baton == "" {
+		return baton, errors.Errorf("baton-do not present in PATH %s",
+			envPath)
+	}
 
-	return baton, err
+	return filepath.Clean(baton), err
 }
 
+// FindAndStart locates the baton-do executable using FindBaton, creates a
+// Client using NewClient and finally calls Start on the newly created Client,
+// passing the argument strings of this function to the Start method. The
+// running Client is returned.
 func FindAndStart(arg ...string) (*Client, error) {
 	baton, err := FindBaton()
 	if err != nil {
 		return nil, err
 	}
 
-	return Start(baton, arg...)
-}
-
-func Start(path string, arg ...string) (*Client, error) {
-	log := logs.GetLogger()
-
-	baton, err := exec.LookPath(path)
+	client, err := NewClient(baton)
 	if err != nil {
 		return nil, err
 	}
 
-	cmd := exec.Command(baton, arg...)
+	return client.Start(arg...)
+}
+
+// NewClient returns a new instance with the executable path set. The path
+// argument is passed to exec.LookPath.
+func NewClient(path string) (*Client, error) {
+	executable, err := exec.LookPath(path)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Client{path: executable}, err
+}
+
+// Start runs the client's external baton program, creating new channels for
+// communication with it. The arguments to Start are passed as command line
+// arguments to the baton program. If the program is already running and Start
+// is called, an error is raised.
+func (client *Client) Start(arg ...string) (*Client, error) {
+	log := logs.GetLogger()
+
+	if client.IsRunning() {
+		return client, errors.New("client is already running")
+	}
+
+	cmd := exec.Command(client.path, arg...)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, err
@@ -192,7 +222,7 @@ func Start(path string, arg ...string) (*Client, error) {
 			case <-ctx.Done():
 				// Close stdin to unblock the reader
 				if ce := stdin.Close(); ce != nil {
-					log.Error().Err(ce).Str("executable", path).
+					log.Error().Err(ce).Str("executable", client.path).
 						Msg("failed to close stdin")
 				}
 				return
@@ -201,7 +231,7 @@ func Start(path string, arg ...string) (*Client, error) {
 
 				if werr != nil {
 					log.Error().Err(werr).
-						Str("executable", path).
+						Str("executable", client.path).
 						Str("value", string(buf)).
 						Int("num_written", n).
 						Msg("error writing to stdin")
@@ -227,10 +257,10 @@ func Start(path string, arg ...string) (*Client, error) {
 				if re == nil {
 					out <- bytes.TrimRight(bout, "\r\n")
 				} else if re == io.EOF {
-					log.Debug().Str("executable", path).
+					log.Debug().Str("executable", client.path).
 						Msg("reached EOF on stdout")
 				} else {
-					log.Error().Err(re).Str("executable", path).
+					log.Error().Err(re).Str("executable", client.path).
 						Msg("read error on stdout")
 				}
 			}
@@ -252,19 +282,24 @@ func Start(path string, arg ...string) (*Client, error) {
 					out := bytes.TrimRight(bout, "\r\n")
 					log.Warn().Msg(string(out))
 				} else if re == io.EOF {
-					log.Debug().Str("executable", path).
+					log.Debug().Str("executable", client.path).
 						Msg("reached EOF on stderr")
 				} else {
-					log.Error().Err(re).Str("executable", path).
+					log.Error().Err(re).Str("executable", client.path).
 						Msg("read error on stderr")
 				}
 			}
 		}
 	}(cancelCtx)
 
-	client := &Client{path, cmd,
-		stdin, stdout, stderr,
-		in, out, cancel, &wg}
+	client.cmd = cmd
+	client.stdin = stdin
+	client.stdout = stdout
+	client.stderr = stderr
+	client.in = in
+	client.out = out
+	client.cancel = cancel
+	client.ioWaitGroup = &wg
 
 	return client, err
 }
@@ -301,7 +336,7 @@ func (client *Client) ClientPid() int {
 // IsRunning returns true if the baton batonExecutable sub-process is
 // running, or false otherwise.
 func (client *Client) IsRunning() bool {
-	return client.cmd.Process != nil &&
+	return client.cmd != nil && client.cmd.Process != nil &&
 		!(client.cmd.ProcessState != nil && client.cmd.ProcessState.Exited())
 }
 
