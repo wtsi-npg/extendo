@@ -122,9 +122,6 @@ func FindBaton() (string, error) {
 	envPath := os.Getenv("PATH")
 	dirs := strings.Split(envPath, ":")
 
-	// FIXME: remove this
-	dirs = append(dirs, "/home/keith/tmp/bin")
-
 	for _, dir := range dirs {
 		paths, err := filepath.Glob(filepath.Join(dir, "baton-do"))
 		if err != nil {
@@ -385,6 +382,23 @@ func (client *Client) ListItem(args Args, item RodsItem) (RodsItem, error) {
 		return item, errors.Errorf("attempt to ListItem multiple "+
 			"items: %+v", items)
 	}
+}
+
+func (client *Client) ListChecksum(item RodsItem) (string, error) {
+	var checksum string
+
+	if !item.IsDataObject() {
+		return checksum, errors.Errorf("invalid argument: can only get "+
+			"the checksum of a file or data object, but was passed %+v", item)
+	}
+
+	obj, err := client.ListItem(Args{Checksum: true}, item)
+	if err != nil {
+		return checksum, err
+	}
+	checksum = obj.IChecksum
+
+	return checksum, err
 }
 
 func (client *Client) metaMod(args Args, item RodsItem) (RodsItem, error) {

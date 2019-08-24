@@ -403,19 +403,19 @@ var _ = Describe("Put a file into iRODS", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(len(items)).To(Equal(1))
 
-			item, err := client.ListItem(ex.Args{Checksum: true}, items[0])
+			checksum, err := client.ListChecksum(items[0])
 			Expect(err).NotTo(HaveOccurred())
-			Expect(item.IChecksum).To(Equal(""))
+			Expect(checksum).To(Equal(""))
 		})
 
 		When("a checksum is requested", func() {
 			It("should have a checksum", func() {
-				items, err := client.Put(ex.Args{Checksum: true}, testObj)
+				_, err := client.Put(ex.Args{Checksum: true}, testObj)
 				Expect(err).NotTo(HaveOccurred())
 
-				item, err := client.ListItem(ex.Args{Checksum: true}, items[0])
+				checksum, err := client.ListChecksum(testObj)
 				Expect(err).NotTo(HaveOccurred())
-				Expect(item.IChecksum).To(Equal(testChecksum))
+				Expect(checksum).To(Equal(testChecksum))
 			})
 		})
 	})
@@ -553,14 +553,16 @@ var _ = Describe("Calculate a data object checksum", func() {
 			_, err := client.Put(ex.Args{}, testObj)
 			Expect(err).NotTo(HaveOccurred())
 
-			item, err := client.ListItem(ex.Args{Checksum: true}, testObj)
+			checksum, err := client.ListChecksum(testObj)
 			Expect(err).NotTo(HaveOccurred())
+			Expect(checksum).To(Equal(""))
 
 			_, err = client.Checksum(ex.Args{}, testObj)
-			item, err = client.ListItem(ex.Args{Checksum: true}, testObj)
 			Expect(err).NotTo(HaveOccurred())
 
-			Expect(item.IChecksum).To(Equal(testChecksum))
+			checksum, err = client.ListChecksum(testObj)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(checksum).To(Equal(testChecksum))
 		})
 	})
 })
@@ -1079,11 +1081,10 @@ var _ = Describe("Archive a file to iRODS", func() {
 						existingObject, newChecksum)
 					Expect(err).NotTo(HaveOccurred())
 
-					item, err := client.ListItem(ex.Args{Checksum: true},
-						existingObject)
+					checksum, err := client.ListChecksum(existingObject)
 					Expect(err).NotTo(HaveOccurred())
 
-					Expect(item.IChecksum).To(Equal(newChecksum))
+					Expect(checksum).To(Equal(newChecksum))
 				})
 
 			})
