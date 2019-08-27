@@ -13,7 +13,6 @@ import (
 	"github.com/kjsanger/logshim/dlog"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"github.com/pkg/errors"
 )
 
 var batonArgs = []string{"--unbuffered"}
@@ -70,14 +69,13 @@ var _ = Describe("Find the baton-do executable", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
-		It("should raise an error", func() {
+		It("should return an error", func() {
 			_, err := ex.FindBaton()
 			Expect(err).To(HaveOccurred())
 			Expect(err).To(MatchError("baton-do not present in PATH ''"))
 		})
 	})
 })
-
 
 var _ = Describe("Start and stop the Item client", func() {
 	var (
@@ -164,15 +162,10 @@ var _ = Describe("List an iRODS path", func() {
 			_, err := client.ListItem(ex.Args{}, item)
 			Expect(err).To(HaveOccurred())
 
-			var expected int32 = -310000
-			var code int32
+			code, e := ex.RodsErrorCode(err)
+			Expect(e).NotTo(HaveOccurred())
 
-			switch err := errors.Cause(err).(type) {
-			case *ex.RodsError:
-				code = err.Code()
-			}
-
-			Expect(code).To(Equal(expected))
+			Expect(code).To(Equal(ex.RodsUserFileDoesNotExist))
 		})
 	})
 
@@ -267,7 +260,7 @@ var _ = Describe("List an iRODS path", func() {
 			})
 
 			When("a recursive list are requested", func() {
-				It("should raise an error", func() {
+				It("should return an error", func() {
 					_, err := client.ListItem(ex.Args{Recurse: true}, testColl)
 					Expect(err).To(HaveOccurred())
 
@@ -461,7 +454,7 @@ var _ = Describe("Put a file into iRODS", func() {
 	})
 
 	When("overwriting a data object", func() {
-		It("should not raise an error", func() {
+		It("should not return an error", func() {
 			items, err := client.Put(ex.Args{}, existingObject)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(items[0].IPath).To(Equal(existingObject.IPath))
@@ -498,20 +491,15 @@ var _ = Describe("Put a directory into iRODS", func() {
 
 			// iRODS considers a non-recursive put to be a transfer of
 			// a file to a data object. A local file does not exist
-			// (just a local directory), so iRODS' client code raises
+			// (just a local directory), so iRODS' client code returns
 			// an error.
 			_, err := client.Put(ex.Args{Recurse: false}, testItem)
 			Expect(err).To(HaveOccurred())
 
-			var expected int32 = -310000
-			var code int32
+			code, e := ex.RodsErrorCode(err)
+			Expect(e).NotTo(HaveOccurred())
 
-			switch err := errors.Cause(err).(type) {
-			case *ex.RodsError:
-				code = err.Code()
-			}
-
-			Expect(code).To(Equal(expected))
+			Expect(code).To(Equal(ex.RodsUserFileDoesNotExist))
 		})
 	})
 
@@ -547,6 +535,168 @@ var _ = Describe("Put a directory into iRODS", func() {
 			}
 
 			Expect(items).To(Equal(expected))
+		})
+	})
+})
+
+var _ = Describe("Remove a data object from iRODS", func() {
+	var (
+		client *ex.Client
+		err    error
+
+		rootColl string
+		workColl string
+
+		testObj      ex.RodsItem
+		testChecksum = "1181c1834012245d785120e3505ed169"
+	)
+
+	BeforeEach(func() {
+		client, err = ex.FindAndStart(batonArgs...)
+		Expect(err).NotTo(HaveOccurred())
+
+		rootColl = "/testZone/home/irods"
+		workColl = tmpRodsPath(rootColl, "ExtendoList")
+
+		err = putTestData("testdata/", workColl)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	AfterEach(func() {
+		err = removeTestData(workColl)
+		Expect(err).NotTo(HaveOccurred())
+
+		client.StopIgnoreError()
+	})
+
+	When("a data object is removed", func() {
+		BeforeEach(func() {
+			testObj = ex.RodsItem{
+				IPath: filepath.Join(workColl, "testdata/1/reads/fast5"),
+				IName: "reads1.fast5"}
+		})
+
+		It("should be absent afterwards", func() {
+			item, err := client.ListItem(ex.Args{Checksum: true}, testObj)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(item.RodsPath()).To(Equal(testObj.RodsPath()))
+			Expect(item.IChecksum).To(Equal(testChecksum))
+
+			_, err = client.RemObj(ex.Args{}, item)
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = client.ListItem(ex.Args{Checksum: true}, testObj)
+			Expect(err).To(HaveOccurred())
+
+			code, e := ex.RodsErrorCode(err)
+			Expect(e).NotTo(HaveOccurred())
+
+			Expect(code).To(Equal(ex.RodsUserFileDoesNotExist))
+		})
+	})
+})
+
+var _ = Describe("Remove an iRODS collection", func() {
+	var (
+		client *ex.Client
+		err    error
+
+		rootColl string
+		workColl string
+
+		testColl ex.RodsItem
+	)
+
+	BeforeEach(func() {
+		client, err = ex.FindAndStart(batonArgs...)
+		Expect(err).NotTo(HaveOccurred())
+
+		rootColl = "/testZone/home/irods"
+		workColl = tmpRodsPath(rootColl, "ExtendoList")
+
+		err = putTestData("testdata/", workColl)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	AfterEach(func() {
+		err = removeTestData(workColl)
+		Expect(err).NotTo(HaveOccurred())
+
+		client.StopIgnoreError()
+	})
+
+	When("the collection is empty", func() {
+		BeforeEach(func() {
+			testColl = ex.RodsItem{IPath: filepath.Join(workColl, "emptyColl")}
+			_, err := client.MkDir(ex.Args{}, testColl)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		When("the collection is removed", func() {
+			It("should be absent afterwards", func() {
+				item, err := client.ListItem(ex.Args{}, testColl)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(item.RodsPath()).To(Equal(testColl.RodsPath()))
+
+				_, err = client.RemDir(ex.Args{}, testColl)
+				Expect(err).NotTo(HaveOccurred())
+
+				item, err = client.ListItem(ex.Args{}, testColl)
+				Expect(err).To(HaveOccurred())
+
+				code, e := ex.RodsErrorCode(err)
+				Expect(e).NotTo(HaveOccurred())
+
+				Expect(code).To(Equal(ex.RodsUserFileDoesNotExist))
+			})
+		})
+	})
+
+	When("the collection has contents", func() {
+		BeforeEach(func() {
+			testColl = ex.RodsItem{IPath: filepath.Join(workColl, "fullColl")}
+			_, err := client.MkDir(ex.Args{}, testColl)
+			Expect(err).NotTo(HaveOccurred())
+
+			objDir, err := filepath.Abs("testdata/1/reads/fast5")
+			Expect(err).NotTo(HaveOccurred())
+
+			testObj := ex.RodsItem{IDirectory: objDir, IFile: "reads1.fast5",
+				IPath: testColl.RodsPath(), IName: "reads1.fast5"}
+
+			_, err = client.Put(ex.Args{}, testObj)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		When("the collection is removed, without recursion", func() {
+			It("should return an iRODS -821000 error", func() {
+				_, err := client.RemDir(ex.Args{Force: false}, testColl)
+				Expect(err).To(HaveOccurred())
+
+				code, e := ex.RodsErrorCode(err)
+				Expect(e).NotTo(HaveOccurred())
+
+				Expect(code).To(Equal(ex.RodsCatCollectionNotEmpty))
+			})
+		})
+
+		FWhen("the collection is removed, with recursion", func() {
+			It("should be absent afterwards", func() {
+				item, err := client.ListItem(ex.Args{}, testColl)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(item.RodsPath()).To(Equal(testColl.RodsPath()))
+
+				_, err = client.RemDir(ex.Args{Recurse: true}, testColl)
+				Expect(err).NotTo(HaveOccurred())
+
+				item, err = client.ListItem(ex.Args{}, testColl)
+				Expect(err).To(HaveOccurred())
+
+				code, e := ex.RodsErrorCode(err)
+				Expect(e).NotTo(HaveOccurred())
+
+				Expect(code).To(Equal(ex.RodsUserFileDoesNotExist))
+			})
 		})
 	})
 })
@@ -801,7 +951,7 @@ var _ = Describe("Metadata query", func() {
 	})
 
 	When("querying without specifying object or collection", func() {
-		It("should raise an error", func() {
+		It("should return an error", func() {
 			var emptyArgs = ex.Args{}
 			_, err := client.MetaQuery(emptyArgs,
 				ex.RodsItem{IAVUs: []ex.AVU{{Attr: "test_attr_a", Value: "1"}}})

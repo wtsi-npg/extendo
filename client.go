@@ -33,6 +33,11 @@ const (
 	RMDIR     = "rmdir"     // rmdir baton operation
 )
 
+const (
+	RodsUserFileDoesNotExist  = int32(-310000)
+	RodsCatCollectionNotEmpty = int32(-821000)
+)
+
 // Client is a launcher for a baton sub-process which holds its system I/O
 // streams and its channels.
 type Client struct {
@@ -102,17 +107,42 @@ type ErrorMsg struct {
 	Code    int32  `json:"code"`
 }
 
+// RodsError is an error raised on the iRODS server and reported to the client.
 type RodsError struct {
 	err  error
 	code int32
 }
 
+// Error implements the error interface for RodsErrors.
 func (e *RodsError) Error() string {
 	return fmt.Sprintf("%s code: %d", e.err, e.code)
 }
 
+// Code returns the iRODS error code for an error.
 func (e *RodsError) Code() int32 {
 	return e.code
+}
+
+// IsRodsError returns true if the Cause of the error is a RodsError.
+func IsRodsError(err error) bool {
+	switch errors.Cause(err).(type) {
+	case *RodsError:
+		return true
+	default:
+		return false
+	}
+}
+
+// RodsErrorCode returns the iRODS error code of the Cause error. If the cause
+// is not a RodsError, an error is returned.
+func RodsErrorCode(err error) (int32, error) {
+	switch e := errors.Cause(err).(type) {
+	case *RodsError:
+		return e.Code(), nil
+	default:
+		return int32(0),
+			errors.Errorf("cannot get an iRODS error code from %v", err)
+	}
 }
 
 // FindBaton returns the cleaned path to the first occurrence of the baton-do
