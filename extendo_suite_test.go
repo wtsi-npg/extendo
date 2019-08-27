@@ -46,6 +46,39 @@ func TestExtendo(t *testing.T) {
 	RunSpecs(t, "Item Suite")
 }
 
+var _ = Describe("Find the baton-do executable", func() {
+	var savedPath string
+
+	When("the executable is on the PATH", func() {
+		It("should be found", func() {
+			path, err := ex.FindBaton()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(path).ToNot(BeEmpty())
+			Expect(filepath.Base(path)).To(Equal("baton-do"))
+		})
+	})
+
+	When("the executable is not on the PATH", func() {
+		BeforeEach(func() {
+			savedPath = os.Getenv("PATH")
+			err := os.Unsetenv("PATH")
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		AfterEach(func() {
+			err := os.Setenv("PATH", savedPath)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should raise an error", func() {
+			_, err := ex.FindBaton()
+			Expect(err).To(HaveOccurred())
+			Expect(err).To(MatchError("baton-do not present in PATH ''"))
+		})
+	})
+})
+
+
 var _ = Describe("Start and stop the Item client", func() {
 	var (
 		client *ex.Client
@@ -348,7 +381,6 @@ var _ = Describe("List an iRODS path", func() {
 			})
 		})
 	})
-
 })
 
 var _ = Describe("Put a file into iRODS", func() {

@@ -139,7 +139,7 @@ func FindBaton() (string, error) {
 		}
 	}
 	if baton == "" {
-		return baton, errors.Errorf("baton-do not present in PATH %s",
+		return baton, errors.Errorf("baton-do not present in PATH '%s'",
 			envPath)
 	}
 
