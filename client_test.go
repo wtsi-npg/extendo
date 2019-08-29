@@ -1,49 +1,15 @@
 package extendo_test
 
 import (
-	"fmt"
-	"math/rand"
 	"os"
 	"path/filepath"
-	"testing"
 	"time"
 
-	ex "extendo"
-	logs "github.com/kjsanger/logshim"
-	"github.com/kjsanger/logshim/dlog"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+
+	ex "extendo"
 )
-
-var batonArgs = []string{"--unbuffered"}
-
-var dirPaths = []string{
-	"testdata",
-	"testdata/1",
-	"testdata/1/reads",
-	"testdata/1/reads/fast5",
-	"testdata/1/reads/fastq",
-	"testdata/testdir"}
-
-var filePaths = []string{
-	"testdata/1/reads/fast5/reads1.fast5",
-	"testdata/1/reads/fast5/reads1.fast5.md5",
-	"testdata/1/reads/fast5/reads2.fast5",
-	"testdata/1/reads/fast5/reads3.fast5",
-	"testdata/1/reads/fastq/reads1.fastq",
-	"testdata/1/reads/fastq/reads1.fastq.md5",
-	"testdata/1/reads/fastq/reads2.fastq",
-	"testdata/1/reads/fastq/reads3.fastq",
-	"testdata/testdir/.gitignore",
-}
-
-func TestExtendo(t *testing.T) {
-	log := dlog.New(GinkgoWriter, logs.DebugLevel)
-	logs.InstallLogger(log)
-
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "Item Suite")
-}
 
 var _ = Describe("Find the baton-do executable", func() {
 	var savedPath string
@@ -680,7 +646,7 @@ var _ = Describe("Remove an iRODS collection", func() {
 			})
 		})
 
-		FWhen("the collection is removed, with recursion", func() {
+		When("the collection is removed, with recursion", func() {
 			It("should be absent afterwards", func() {
 				item, err := client.ListItem(ex.Args{}, testColl)
 				Expect(err).NotTo(HaveOccurred())
@@ -957,9 +923,8 @@ var _ = Describe("Metadata query", func() {
 				ex.RodsItem{IAVUs: []ex.AVU{{Attr: "test_attr_a", Value: "1"}}})
 			Expect(err).To(HaveOccurred())
 
-			Expect(err).To(MatchError("metaquery arguments must " +
-				"specify Object and/or Collection targets; " +
-				"neither were specified"))
+			pattern := `metaquery arguments must specify.*neither were specified`
+			Expect(err).To(MatchError(MatchRegexp(pattern)))
 		})
 	})
 
@@ -1103,236 +1068,3 @@ var _ = Describe("Add metadata", func() {
 		})
 	})
 })
-
-var _ = Describe("Replace metadata", func() {
-	var (
-		client *ex.Client
-		err    error
-
-		rootColl string
-		workColl string
-
-		testObj ex.RodsItem
-
-		avuA0, avuA1, avuA2, avuB0, avuB1 ex.AVU
-	)
-
-	BeforeEach(func() {
-		client, err = ex.FindAndStart(batonArgs...)
-		Expect(err).NotTo(HaveOccurred())
-
-		rootColl = "/testZone/home/irods"
-		workColl = tmpRodsPath(rootColl, "ExtendoReplace")
-
-		err = putTestData("testdata/", workColl)
-		Expect(err).NotTo(HaveOccurred())
-
-		testObj = ex.RodsItem{
-			IPath: filepath.Join(workColl, "testdata/1/reads/fast5"),
-			IName: "reads1.fast5"}
-
-		avuA0 = ex.MakeAVU("a", "0", "z")
-		avuA1 = ex.MakeAVU("a", "1")
-		avuA2 = ex.MakeAVU("a", "2", "z")
-
-		avuB0 = ex.MakeAVU("b", "0", "z")
-		avuB1 = ex.MakeAVU("b", "1", "z")
-
-		testObj.IAVUs = []ex.AVU{avuA0, avuA1, avuA2, avuB0, avuB1}
-		_, err := client.MetaAdd(ex.Args{}, testObj)
-		Expect(err).NotTo(HaveOccurred())
-	})
-
-	AfterEach(func() {
-		err = removeTestData(workColl)
-		Expect(err).NotTo(HaveOccurred())
-
-		client.StopIgnoreError()
-	})
-
-	Context("replacing metadata on data objects", func() {
-		When("it shares attributes with existing metadata", func() {
-			It("should be added", func() {
-				newAVU := ex.MakeAVU("a", "nvalue", "nunits")
-				_, err := client.ReplaceAVUs(testObj, []ex.AVU{newAVU})
-				Expect(err).NotTo(HaveOccurred())
-
-				updated, err := client.ListItem(ex.Args{AVU: true}, testObj)
-				Expect(err).NotTo(HaveOccurred())
-
-				Expect(updated.IAVUs).To(Equal([]ex.AVU{newAVU, avuB0, avuB1}))
-			})
-		})
-	})
-
-})
-
-var _ = Describe("Archive a file to iRODS", func() {
-	var (
-		client *ex.Client
-		err    error
-
-		rootColl string
-		workColl string
-
-		existingObject ex.RodsItem
-		testObj        ex.RodsItem
-
-		testChecksum = "1181c1834012245d785120e3505ed169"
-		newChecksum  = "348bd3ce10ec00ecc29d31ec97cd5839"
-	)
-
-	BeforeEach(func() {
-		client, err = ex.FindAndStart(batonArgs...)
-		Expect(err).NotTo(HaveOccurred())
-
-		rootColl = "/testZone/home/irods"
-		workColl = tmpRodsPath(rootColl, "ExtendoPut")
-
-		err = putTestData("testdata/", workColl)
-		Expect(err).NotTo(HaveOccurred())
-
-		objDir, err := filepath.Abs("testdata/1/reads/fast5")
-		Expect(err).NotTo(HaveOccurred())
-		objFile := "reads99.fast5"
-
-		testObj = ex.RodsItem{IDirectory: objDir,
-			IFile: "reads1.fast5",
-			IPath: workColl, IName: objFile}
-
-		coll := filepath.Join(workColl, "testdata/1/reads/fast5")
-		existingObject = ex.RodsItem{IDirectory: objDir,
-			IFile: "reads1.fast5",
-			IPath: coll, IName: "reads1.fast5"}
-	})
-
-	AfterEach(func() {
-		err = removeTestData(workColl)
-		Expect(err).NotTo(HaveOccurred())
-
-		client.StopIgnoreError()
-	})
-
-	Context("archiving a data object", func() {
-		When("a new data object", func() {
-			When("the testChecksum is matched", func() {
-				It("should be present in iRODS afterwards", func() {
-					item, err := client.Archive(ex.Args{}, testObj, testChecksum)
-					Expect(err).NotTo(HaveOccurred())
-
-					item, err = client.ListItem(ex.Args{}, item)
-					Expect(err).NotTo(HaveOccurred())
-
-					Expect(item.IPath).To(Equal(testObj.IPath))
-					Expect(item.IName).To(Equal(testObj.IName))
-				})
-
-				It("should return the testChecksum", func() {
-					item, err := client.Archive(ex.Args{}, testObj, testChecksum)
-					Expect(err).NotTo(HaveOccurred())
-
-					Expect(item.IChecksum).To(Equal(testChecksum))
-				})
-			})
-
-			When("the testChecksum is mismatched", func() {
-				It("archiving should fail", func() {
-					dummyChecksum := "no_such_checksum"
-					_, err := client.Archive(ex.Args{}, testObj, dummyChecksum)
-					Expect(err).To(HaveOccurred())
-
-					Expect(err).To(MatchError(fmt.Sprintf(
-						"failed to archive %s: local checksum '%s' "+
-							"did not match remote checksum '%s'",
-						testObj.RodsPath(), dummyChecksum, testChecksum)))
-				})
-			})
-		})
-
-		When("overwriting a data object with a different file", func() {
-			When("the data object has the new checksum", func() {
-				It("should be present in iRODS afterwards", func() {
-					// same data object, new local file (was reads1.fast5)
-					existingObject.IFile = "reads2.fast5"
-					_, err := client.Archive(ex.Args{},
-						existingObject, newChecksum)
-					Expect(err).NotTo(HaveOccurred())
-
-					item, err := client.ListItem(ex.Args{}, existingObject)
-					Expect(err).NotTo(HaveOccurred())
-
-					Expect(item.RodsPath()).To(Equal(existingObject.RodsPath()))
-				})
-
-				It("should have the new checksum", func() {
-					// same data object, new local file (was reads1.fast5)
-					existingObject.IFile = "reads2.fast5"
-					_, err := client.Archive(ex.Args{},
-						existingObject, newChecksum)
-					Expect(err).NotTo(HaveOccurred())
-
-					checksum, err := client.ListChecksum(existingObject)
-					Expect(err).NotTo(HaveOccurred())
-
-					Expect(checksum).To(Equal(newChecksum))
-				})
-
-			})
-		})
-	})
-
-	Context("archiving a collection", func() {
-		It("should fail to archive", func() {
-			coll := ex.RodsItem{IDirectory: "testdata", IPath: workColl}
-			_, err := client.Archive(ex.Args{}, coll, "")
-			Expect(err).To(HaveOccurred())
-
-			Expect(err).To(MatchError(fmt.Sprintf("cannot archive %s "+
-				"as it is not a file", coll.RodsPath())))
-		})
-	})
-})
-
-func putTestData(src string, dst string) error {
-	src = filepath.Clean(src)
-	dst = filepath.Clean(dst)
-
-	client, err := ex.FindAndStart("--unbuffered")
-	if err != nil {
-		return err
-	}
-
-	_, err = client.MkDir(ex.Args{Recurse: true}, ex.RodsItem{IPath: dst})
-	if err != nil {
-		return err
-	}
-
-	_, err = client.Put(ex.Args{Checksum: true, Recurse: true},
-		ex.RodsItem{IDirectory: src, IPath: dst})
-	if err != nil {
-		return err
-	}
-
-	return err
-}
-
-func removeTestData(dst string) error {
-	client, err := ex.FindAndStart("--unbuffered")
-	if err != nil {
-		return err
-	}
-	_, err = client.RemDir(ex.Args{Force: true, Recurse: true},
-		ex.RodsItem{IPath: dst})
-	if err != nil {
-		return err
-	}
-
-	return client.Stop()
-}
-
-func tmpRodsPath(root string, prefix string) string {
-	s := rand.NewSource(GinkgoRandomSeed())
-	r := rand.New(s)
-	d := fmt.Sprintf("%s.%d.%010d", prefix, os.Getpid(), r.Uint32())
-	return filepath.Join(root, d)
-}

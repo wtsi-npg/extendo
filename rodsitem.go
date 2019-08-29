@@ -3,12 +3,13 @@ package extendo
 import (
 	"path/filepath"
 	"time"
-
-	"github.com/pkg/errors"
 )
 
 // RodsItem represents both collections and data objects in iRODS. It describes
-// the JSON document used by baton and the extendo wrapper.
+// the JSON document used by baton and the extendo wrapper and its purpose is to
+// enable extendo to communicate with baton. Extendo includes a higher level API
+// having distinct types for data objects and collections which should be used
+// in preference to RodsItem.
 type RodsItem struct {
 	client *Client
 	// Local file name
@@ -117,22 +118,6 @@ func CopyRodsItem(item RodsItem) RodsItem {
 	}
 }
 
-func Unwrap(items []RodsItem) (RodsItem, error) {
-	var item RodsItem
-
-	switch len(items) {
-	case 0:
-		return item,
-			errors.New("cannot unwrap from an empty array")
-	case 1:
-		return items[0], nil
-	default:
-		return item,
-			errors.Errorf("cannot unwrap from an array with %d members",
-				len(items))
-	}
-}
-
 type RodsItemArr []RodsItem
 
 func (a RodsItemArr) Len() int {
@@ -208,9 +193,6 @@ func (a AVUArr) Swap(i, j int) {
 }
 
 func (a AVUArr) Less(i, j int) bool {
-	// return a[i].Attr < a[j].Attr ||
-	// 	a[i].Value < a[i].Value ||
-	// 	a[i].Units < a[j].Units
 	return AVULess(a[i], a[j])
 }
 

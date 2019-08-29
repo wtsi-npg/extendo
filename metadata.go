@@ -7,7 +7,6 @@ import (
 	"time"
 
 	dcterms "extendo/dublincore"
-	"github.com/kjsanger/logshim"
 )
 
 func MakeAVU(attr string, value string, units ...string) AVU {
@@ -23,7 +22,7 @@ func MakeCreationMetadata() []AVU {
 	when := time.Now().Format(time.RFC3339)
 	who, err := user.Current()
 	if err != nil {
-		panic("failed to lookup current who")
+		panic("failed to lookup the current system user")
 	}
 
 	publisher := fmt.Sprintf("ldap://ldap.internal.sanger.ac.uk/"+
@@ -36,8 +35,8 @@ func MakeCreationMetadata() []AVU {
 	}
 }
 
-// SearchAVU returns true if avu is found in avus. The function sorts avus if
-// necessary.
+// SearchAVU returns true if avu is found in the slice of AVUs. The function
+// sorts slice of AVUs if it is unsorted.
 func SearchAVU(avu AVU, avus []AVU) bool {
 	arr := AVUArr(avus)
 	if !sort.IsSorted(arr) {
@@ -49,25 +48,22 @@ func SearchAVU(avu AVU, avus []AVU) bool {
 
 	if i < len(arr) && avus[i] == avu {
 		return true
-	} else {
-		return false
 	}
+	return false
 }
 
-// IntersectionAVUs returns a sorted slice of AVUs contaning the intersection of
-// the two slice arguments.
-func IntersectionAVUs(x []AVU, y []AVU) []AVU {
-	var shortest, longest AVUArr
-	if len(x) < len(y) {
-		shortest, longest = x, y
-	} else {
-		shortest, longest = y, x
+// SetIntersectAVUs returns a sorted slice of AVUs containing the intersection
+// of the two slice arguments.
+func SetIntersectAVUs(x []AVU, y []AVU) []AVU {
+	mx := make(map[AVU]struct{})
+
+	for _, avu := range x {
+		mx[avu] = struct{}{}
 	}
 
-	// Search shortest because SearchAVU sorts its array, currently
 	var intersection AVUArr
-	for _, avu := range longest {
-		if SearchAVU(avu, shortest) {
+	for _, avu := range y {
+		if _, ok := mx[avu]; ok {
 			intersection = append(intersection, avu)
 		}
 	}
@@ -76,7 +72,51 @@ func IntersectionAVUs(x []AVU, y []AVU) []AVU {
 	return intersection
 }
 
-// UniqAVUs returns a sorted slice of AVUs with any duplicates removed.
+// SetUnionAVUs returns a sorted slice of AVUs containing the union
+// of the two slice arguments.
+func SetUnionAVUs(x []AVU, y []AVU) []AVU {
+	mx := make(map[AVU]struct{})
+
+	var union AVUArr
+	for _, avu := range x {
+		if _, ok := mx[avu]; !ok {
+			mx[avu] = struct{}{}
+			union = append(union, avu)
+		}
+	}
+
+	for _, avu := range y {
+		if _, ok := mx[avu]; !ok {
+			union = append(union, avu)
+		}
+	}
+
+	sort.Sort(union)
+	return union
+}
+
+// SetDiffAVUs returns a sorted slice of AVUs containing the set difference
+// between the x and y slice arguments.
+func SetDiffAVUs(x []AVU, y []AVU) []AVU {
+	my := make(map[AVU]struct{})
+
+	for _, avu := range y {
+		my[avu] = struct{}{}
+	}
+
+	var diff AVUArr
+	for _, avu := range x {
+		if _, ok := my[avu]; !ok {
+			diff = append(diff, avu)
+		}
+	}
+
+	sort.Sort(diff)
+	return diff
+}
+
+// UniqAVUs returns a newly allocated, sorted slice of AVUs containing no
+// duplicates.
 func UniqAVUs(avus []AVU) []AVU {
 	uniq := make([]AVU, 0, len(avus))
 
@@ -90,85 +130,10 @@ func UniqAVUs(avus []AVU) []AVU {
 		}
 	}
 
-	return SortAVUs(uniq)
+	return uniq
 }
 
 func SortAVUs(avus AVUArr) []AVU {
 	sort.Sort(avus)
 	return avus
-}
-
-// ReplaceAVUs removes any existing AVUs sharing an attribute with the argument
-// AVUs and then adds the argument AVUs,
-func (client *Client) ReplaceAVUs(item RodsItem, avus []AVU) (RodsItem, error) {
-	remAttrs := make(map[string]struct{})
-	for _, avu := range avus {
-		remAttrs[avu.Attr] = struct{}{}
-	}
-
-	// These are in the existing and replacement sets. Avoid removing them.
-	keepAVUs := IntersectionAVUs(avus, item.IAVUs)
-
-	var remAVUs []AVU
-	for _, avu := range item.IAVUs {
-		if _, ok := remAttrs[avu.Attr]; ok {
-			if !SearchAVU(avu, keepAVUs) {
-				remAVUs = append(remAVUs, avu)
-			}
-		}
-	}
-
-	var addAVUS []AVU
-	for _, avu := range avus {
-		if !SearchAVU(avu, keepAVUs) {
-			addAVUS = append(addAVUS, avu)
-		}
-	}
-
-	log := logshim.GetLogger()
-	rem := CopyRodsItem(item)
-	rem.IAVUs = remAVUs
-
-	if len(remAVUs) > 0 {
-		log.Info().Str("path", item.String()).
-			Str("operation", "remove").Msgf("%+v", remAVUs)
-		_, err := client.MetaRem(Args{}, rem)
-		if err != nil {
-			return item, err
-		}
-	}
-
-	if len(keepAVUs) > 0 {
-		log.Info().Str("path", item.String()).
-			Str("operation", "none").Msgf("%+v", keepAVUs)
-	}
-
-	if len(addAVUS) > 0 {
-		add := CopyRodsItem(item)
-		add.IAVUs = addAVUS
-		log.Info().Str("path", item.String()).
-			Str("operation", "add").Msgf("%+v", addAVUS)
-		_, err := client.MetaAdd(Args{}, add)
-		if err != nil {
-			return item, err
-		}
-	}
-
-	return item, nil
-}
-
-func uniq(items []string) []string {
-	set := make(map[string]struct{})
-
-	for _, item := range items {
-		set[item] = struct{}{}
-	}
-
-	keys := make([]string, 0, len(set))
-	for key := range set {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-
-	return keys
 }

@@ -2,7 +2,7 @@ package dublincore
 
 // https://www.dublincore.org/resources/userguide/publishing_metadata/
 const (
-	Namespace   = "dcterms"             // http://purl.org/dc/terms/
+	Namespace = "dcterms" // http://purl.org/dc/terms/
 
 	Contributor = "dcterms:contributor" // http://purl.org/dc/elements/1.1/contributor
 	Coverage    = "dcterms:coverage"    // http://purl.org/dc/elements/1.1/coverage

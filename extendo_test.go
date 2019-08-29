@@ -11,8 +11,9 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// These are whitebox Unit tests with access to extendo package internals.
 func TestMain(m *testing.M) {
-	loggerImpl := zlog.New(os.Stderr, logs.WarnLevel)
+	loggerImpl := zlog.New(os.Stderr, logs.ErrorLevel)
 
 	writer := zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.RFC3339}
 	consoleLogger := loggerImpl.Logger.Output(zerolog.SyncWriter(writer))
@@ -24,46 +25,51 @@ func TestMain(m *testing.M) {
 
 func TestFindBaton(t *testing.T) {
 	path, err := FindBaton()
-	assert.NoError(t, err)
-	info, err := os.Stat(path)
 	if assert.NoError(t, err) {
-		assert.False(t, info.IsDir())
-		assert.Equal(t, info.Name(), "baton-do")
+		info, err := os.Stat(path)
+		if assert.NoError(t, err) {
+			assert.False(t, info.IsDir())
+			assert.Equal(t, info.Name(), "baton-do")
+		}
 	}
 }
 
 func TestStartClient(t *testing.T) {
 	bc, err := FindAndStart()
-	assert.NoError(t, err, "Failed to start baton-do")
-	assert.True(t, bc.IsRunning(), "baton-do is not running")
-
-	_ = bc.Stop()
+	if assert.NoError(t, err, "Failed to start baton-do") {
+		assert.True(t, bc.IsRunning(), "baton-do is not running")
+		_ = bc.Stop()
+	}
 }
 
 func TestStopClient(t *testing.T) {
 	bc, err := FindAndStart()
-	assert.NoError(t, err, "Failed to start baton-do")
+	if assert.NoError(t, err, "Failed to start baton-do") {
+		assert.True(t, bc.IsRunning(), "baton-do is not running")
 
-	assert.True(t, bc.IsRunning(), "baton-do is not running")
-
-	assert.NoError(t, bc.Stop(), "Failed to stop baton-do")
-	assert.True(t, bc.cmd.ProcessState.Success(),
-		"baton-do did not run successfully")
+		if assert.NoError(t, bc.Stop(), "Failed to stop baton-do") {
+			assert.True(t, bc.cmd.ProcessState.Success(),
+				"baton-do did not run successfully")
+		}
+	}
 }
 
 func TestIsRunning(t *testing.T) {
 	bc, err := FindAndStart()
-	assert.NoError(t, err, "Failed to start baton-do")
-	assert.True(t, bc.IsRunning(), "baton-do is not running")
-	_ = bc.Stop()
-	assert.False(t, bc.IsRunning(), "baton-do is still running")
+	if assert.NoError(t, err, "Failed to start baton-do") {
+		assert.True(t, bc.IsRunning(), "baton-do is not running")
+		_ = bc.Stop()
+		assert.False(t, bc.IsRunning(), "baton-do is still running")
+	}
 }
 
 func TestClientPid(t *testing.T) {
-	bc, _ := FindAndStart()
-	pid := bc.ClientPid()
-	assert.NotNil(t, pid, "baton-do PID is %d", pid)
-	_ = bc.Stop()
+	bc, err := FindAndStart()
+	if assert.NoError(t, err, "Failed to start baton-do") {
+		pid := bc.ClientPid()
+		assert.NotNil(t, pid, "baton-do PID is %d", pid)
+		_ = bc.Stop()
+	}
 }
 
 func TestIsLocalDir(t *testing.T) {
@@ -117,7 +123,7 @@ func TestSearchAVU(t *testing.T) {
 	assert.False(t, SearchAVU(MakeAVU("f", "g"), avus))
 }
 
-func TestIntersectionAVUs(t *testing.T) {
+func TestSetIntersectAVUs(t *testing.T) {
 	avu0 := MakeAVU("x", "y", "z")
 	avu1 := MakeAVU("a", "b", "z")
 	avu2 := MakeAVU("w", "x", "z")
@@ -127,7 +133,30 @@ func TestIntersectionAVUs(t *testing.T) {
 	avusX := []AVU{avu0, avu1, avu2, avu3}
 	avusY := []AVU{avu4, avu3, avu2}
 
-	assert.Equal(t, IntersectionAVUs(avusX, avusY), []AVU{avu3, avu2})
+	intersection := SetIntersectAVUs(avusX, avusY)
+	assert.Equal(t, 2, len(intersection))
+
+	for _, avu := range []AVU{avu3, avu2} {
+		assert.Contains(t, intersection, avu)
+	}
+}
+
+func TestSetUnionAVUs(t *testing.T) {
+	avu0 := MakeAVU("x", "y", "z")
+	avu1 := MakeAVU("a", "b", "z")
+	avu2 := MakeAVU("w", "x", "z")
+	avu3 := MakeAVU("1", "2", "3")
+	avu4 := MakeAVU("4", "5", "6")
+
+	avusX := []AVU{avu0, avu1, avu2, avu3}
+	avusY := []AVU{avu4, avu3, avu2}
+
+	union := SetUnionAVUs(avusX, avusY)
+	assert.Equal(t, 5, len(union))
+
+	for _, avu := range []AVU{avu0, avu1, avu2, avu3, avu4} {
+		assert.Contains(t, union, avu)
+	}
 }
 
 func TestUniqAVUs(t *testing.T) {

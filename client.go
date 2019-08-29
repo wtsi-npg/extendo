@@ -34,8 +34,8 @@ const (
 )
 
 const (
-	RodsUserFileDoesNotExist  = int32(-310000)
-	RodsCatCollectionNotEmpty = int32(-821000)
+	RodsUserFileDoesNotExist  = int32(-310000) // iRODS: user file does not exist
+	RodsCatCollectionNotEmpty = int32(-821000) // iRODS: collection not empty
 )
 
 // Client is a launcher for a baton sub-process which holds its system I/O
@@ -363,15 +363,15 @@ func (client *Client) ClientPid() int {
 	return -1
 }
 
-// IsRunning returns true if the baton batonExecutable sub-process is
-// running, or false otherwise.
+// IsRunning returns true if the baton sub-process is running, or false
+// otherwise.
 func (client *Client) IsRunning() bool {
 	return client.cmd != nil && client.cmd.Process != nil &&
 		!(client.cmd.ProcessState != nil && client.cmd.ProcessState.Exited())
 }
 
-// Chmod sets permissions on a collection or data object. By setting
-// Recurse=true in Args, the operation may be made recursive.
+// Chmod sets permissions on a collection or data object in iRODS. By setting
+// Args.Recurse=true, the operation may be made recursive.
 func (client *Client) Chmod(args Args, item RodsItem) (RodsItem, error) {
 	items, err := client.execute(CHMOD, args, item)
 	if err != nil {
@@ -380,10 +380,10 @@ func (client *Client) Chmod(args Args, item RodsItem) (RodsItem, error) {
 	return items[0], err
 }
 
-// Checksum calculates a checksum for a data object. iRODS makes this a
-// no-op if a checksum is already recorded. However, this can be overridden by
-// setting Force=true in Args. When called, this sets or updates the checksum
-// on all replicates. If Checksum=true is set in Args, the new checksum will
+// Checksum calculates a checksum for a data object in iRODS. iRODS makes this
+// a no-op if a checksum is already recorded. However, this can be overridden
+// by setting Force=true in Args. When called, this sets or updates the checksum
+// on all replicates. If Args.Checksum=true is set, the new checksum will
 // be reported in the return value.
 func (client *Client) Checksum(args Args, item RodsItem) (RodsItem, error) {
 	items, err := client.execute(CHECKSUM, args, item)
@@ -402,10 +402,10 @@ func (client *Client) Get(args Args, item RodsItem) (RodsItem, error) {
 	return items[0], err
 }
 
-// List retrieves information about collections and/or data objects. The items
-// returned are sorted as a RodsItemArr (collections first, then by path and
-// finally by name). The detailed composition of the items is influenced by the
-// supplied Args:
+// List retrieves information about collections and/or data objects in iRODS.
+// The items returned are sorted as a RodsItemArr (collections first, then by
+// path and finally by name). The detailed composition of the items is
+// influenced by the supplied Args:
 //
 // Args.ACL = true        Include ACLs
 // Args.AVU = true        Include AVUs
@@ -424,10 +424,10 @@ func (client *Client) List(args Args, item RodsItem) ([]RodsItem, error) {
 }
 
 // ListItem retrieves information about an individual collection or data
-// object. The effects of Args are the same as for List, except that Recurse is
-// not permitted. If the listed item does not exist, an error is returned. If
-// the operation would return more than one collection or data object, an error
-// is returned.
+// object in iRODS. The effects of Args are the same as for List, except that
+// Recurse is not permitted. If the listed item does not exist, an error is
+// returned. If the operation would return more than one collection or data
+// object, an error is returned.
 func (client *Client) ListItem(args Args, item RodsItem) (RodsItem, error) {
 	if args.Recurse {
 		return item, errors.New("invalid argument: Recurse=true")
@@ -474,15 +474,15 @@ func (client *Client) metaMod(args Args, item RodsItem) (RodsItem, error) {
 	return items[0], err
 }
 
-// MetaAdd adds the AVUs of the item to a collection or data object and returns
-// the item.
+// MetaAdd adds the AVUs of the item to a collection or data object in iRODS
+// and returns the item.
 func (client *Client) MetaAdd(args Args, item RodsItem) (RodsItem, error) {
 	args.Operation = METAADD
 	return client.metaMod(args, item)
 }
 
-// MetaRem removes the AVUs of the item from a collection or data object and
-// returns the item.
+// MetaRem removes the AVUs of the item from a collection or data object in
+// iRODS and returns the item.
 func (client *Client) MetaRem(args Args, item RodsItem) (RodsItem, error) {
 	args.Operation = METAREM
 	return client.metaMod(args, item)
@@ -497,6 +497,7 @@ func (client *Client) MetaQuery(args Args, item RodsItem) ([]RodsItem, error) {
 	return client.execute(METAQUERY, args, item)
 }
 
+// MkDir creates a new collection in iRODS and returns the item.
 func (client *Client) MkDir(args Args, item RodsItem) (RodsItem, error) {
 	items, err := client.execute(MKDIR, args, item)
 	if err != nil {
@@ -505,6 +506,9 @@ func (client *Client) MkDir(args Args, item RodsItem) (RodsItem, error) {
 	return items[0], err
 }
 
+// Puts a collection or data object into iRODS and returns the item. By
+// setting Args.Recurse=true, the operation may be made recursive on a
+// collection.
 func (client *Client) Put(args Args, item RodsItem) ([]RodsItem, error) {
 	if args.Recurse {
 		return client.putRecurse(args, item)
@@ -513,47 +517,12 @@ func (client *Client) Put(args Args, item RodsItem) ([]RodsItem, error) {
 	return client.execute(PUT, args, item)
 }
 
-// Archive copies a file to a data object. It differs from Put in that it
-// always forces a checksum calculation on the server side and also checks the
-// returned checksum against an independently supplied checksum argument.
-func (client *Client) Archive(args Args, item RodsItem, checksum string) (
-	RodsItem, error) {
-	var archived RodsItem
-
-	if !item.IsLocalFile() {
-		return archived,
-			errors.Errorf("cannot archive %s as it is not a file",
-				item.String())
-	}
-
-	items, perr := client.Put(Args{Checksum: true, Force: true, AVU: true}, item)
-	if perr != nil {
-		return archived, perr
-	}
-	archived, uerr := Unwrap(items)
-	if uerr != nil {
-		return archived, uerr
-	}
-
-	if archived.IChecksum != checksum {
-		return archived,
-			errors.Errorf("failed to archive %s: local checksum '%s' "+
-				"did not match remote checksum '%s'",
-				item.String(), checksum, archived.IChecksum)
-	}
-
-	_, merr := client.ReplaceAVUs(archived, MakeCreationMetadata())
-	if merr != nil {
-		return archived, merr
-	}
-
-	return archived, nil
-}
-
+// RemObj removes a data object from iRODS and returns the item.
 func (client *Client) RemObj(args Args, item RodsItem) ([]RodsItem, error) {
 	return client.execute(REMOVE, args, item)
 }
 
+// RemDir removes a collection from iRODS and returns the item.
 func (client *Client) RemDir(args Args, item RodsItem) ([]RodsItem, error) {
 	return client.execute(RMDIR, args, item)
 }
