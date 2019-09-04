@@ -26,7 +26,7 @@ import (
 	"sort"
 	"time"
 
-	dcterms "extendo/dublincore"
+	dcterms "github.com/kjsanger/extendo/dublincore"
 )
 
 func MakeAVU(attr string, value string, units ...string) AVU {

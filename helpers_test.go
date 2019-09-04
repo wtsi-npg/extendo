@@ -28,7 +28,7 @@ import (
 
 	. "github.com/onsi/ginkgo"
 
-	ex "extendo"
+	ex "github.com/kjsanger/extendo"
 )
 
 var batonArgs = []string{"--unbuffered"}

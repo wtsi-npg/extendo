@@ -26,7 +26,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	ex "extendo"
+	ex "github.com/kjsanger/extendo"
 )
 
 var _ = Describe("Make an existing DataObject instance from iRODS", func() {
@@ -268,7 +268,8 @@ var _ = Describe("Archive a DataObject into iRODS", func() {
 				avus, err := obj.FetchMetadata()
 				Expect(err).NotTo(HaveOccurred())
 
-				Expect(avus).To(ConsistOf(ex.SetUnionAVUs(creationMeta, extraMeta)))
+				expected := ex.SetUnionAVUs(creationMeta, extraMeta)
+				Expect(avus).To(ConsistOf(expected))
 			})
 		})
 	})

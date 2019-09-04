@@ -26,7 +26,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	ex "extendo"
+	ex "github.com/kjsanger/extendo"
 )
 
 var _ = Describe("Make an existing Collection instance from iRODS", func() {

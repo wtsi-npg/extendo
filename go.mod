@@ -1,4 +1,4 @@
-module extendo
+module github.com/kjsanger/extendo
 
 go 1.12
 

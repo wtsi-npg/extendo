@@ -28,7 +28,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	ex "extendo"
+	ex "github.com/kjsanger/extendo"
 )
 
 var _ = Describe("Find the baton-do executable", func() {
