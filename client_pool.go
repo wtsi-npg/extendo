@@ -61,7 +61,7 @@ var (
 // specified timeout before returning an error. The clientArgs arguments will
 // be passed to the FindAndStart() method when creating each new Client.
 func NewClientPool(maxSize uint8, timeout time.Duration,
-	clientArgs ...string) (*ClientPool, error) {
+	clientArgs ...string) *ClientPool {
 
 	processedArgs := []string{"--unbuffered"} // Always need this
 	processedArgs = utilities.Uniq(append(processedArgs, clientArgs...))
@@ -75,7 +75,7 @@ func NewClientPool(maxSize uint8, timeout time.Duration,
 		clients:    make(chan *Client, maxSize),
 	}
 
-	return &pool, nil
+	return &pool
 }
 
 // IsOpen returns true if the pool is open.

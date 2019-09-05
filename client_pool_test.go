@@ -31,12 +31,10 @@ import (
 
 var _ = Describe("Make a client pool", func() {
 	var pool *ex.ClientPool
-	var poolErr error
 
 	When("a pool is created", func() {
 		It("should be open", func() {
-			pool, poolErr = ex.NewClientPool(10, time.Second)
-			Expect(poolErr).NotTo(HaveOccurred())
+			pool = ex.NewClientPool(10, time.Second)
 			Expect(pool.IsOpen()).To(BeTrue())
 		})
 
@@ -51,13 +49,10 @@ var _ = Describe("Get clients from the pool", func() {
 	var poolSize = uint8(10)
 	var poolTimout = time.Millisecond * 250
 	var pool *ex.ClientPool
-	var poolErr error
 	var clients []*ex.Client
 
 	BeforeEach(func() {
-		poolSize = 10
-		pool, poolErr = ex.NewClientPool(poolSize, poolTimout)
-		Expect(poolErr).NotTo(HaveOccurred())
+		pool = ex.NewClientPool(poolSize, poolTimout)
 	})
 
 	AfterEach(func() {
@@ -68,7 +63,7 @@ var _ = Describe("Get clients from the pool", func() {
 		It("should supply n running clients before Get times out", func() {
 
 		loop:
-			for timeout := time.After(time.Second * 10) ;; {
+			for timeout := time.After(time.Second * 10); ; {
 				select {
 				case <-timeout:
 					break loop // Fallback test timeout if something goes wrong
@@ -96,12 +91,10 @@ var _ = Describe("Return clients to the pool", func() {
 	var poolSize = uint8(10)
 	var poolTimout = time.Millisecond * 250
 	var pool *ex.ClientPool
-	var poolErr error
 	var clients []*ex.Client
 
 	BeforeEach(func() {
-		pool, poolErr = ex.NewClientPool(poolSize, poolTimout)
-		Expect(poolErr).NotTo(HaveOccurred())
+		pool = ex.NewClientPool(poolSize, poolTimout)
 
 		var newClients []*ex.Client
 		for i := 0; i < int(poolSize); i++ {
@@ -146,4 +139,3 @@ var _ = Describe("Return clients to the pool", func() {
 		})
 	})
 })
-
