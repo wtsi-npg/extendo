@@ -21,20 +21,27 @@
 package extendo_test
 
 import (
+	"os"
 	"testing"
+	"time"
 
 	logs "github.com/kjsanger/logshim"
-	"github.com/kjsanger/logshim/dlog"
+	"github.com/kjsanger/logshim-zerolog/zlog"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/rs/zerolog"
 )
 
 // Define the Extendo test suite. The tests themselves are defined in separate
 // files. These are BDD-style blackbox tests conducted from outside the extendo
 // package.
 func TestExtendo(t *testing.T) {
-	log := dlog.New(GinkgoWriter, logs.ErrorLevel)
-	logs.InstallLogger(log)
+	loggerImpl := zlog.New(os.Stderr, logs.DebugLevel)
+
+	writer := zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.RFC3339}
+	consoleLogger := loggerImpl.Logger.Output(zerolog.SyncWriter(writer))
+	loggerImpl.Logger = &consoleLogger
+	logs.InstallLogger(loggerImpl)
 
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Extendo Suite")
