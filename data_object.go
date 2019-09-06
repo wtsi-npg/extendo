@@ -23,6 +23,7 @@ package extendo
 import (
 	"path/filepath"
 
+	logs "github.com/kjsanger/logshim"
 	"github.com/pkg/errors"
 )
 
@@ -125,6 +126,11 @@ func ArchiveDataObject(client *Client, localPath string, remotePath string,
 	for _, x := range avus {
 		allAVUs = append(allAVUs, x...)
 	}
+
+	logs.GetLogger().Debug().
+		Str("local_path", localPath).
+		Str("remote_path", remotePath).
+		Str("expected_checksum", expectedChecksum).Msg("archiving")
 
 	err = obj.ReplaceMetadata(UniqAVUs(allAVUs))
 

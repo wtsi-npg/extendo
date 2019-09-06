@@ -55,21 +55,16 @@ func MakeCreationMetadata() []AVU {
 	}
 }
 
-// SearchAVU returns true if avu is found in the slice of AVUs. The function
-// sorts slice of AVUs if it is unsorted.
+// SearchAVU returns true if avu is found in the slice of AVUs.
 func SearchAVU(avu AVU, avus []AVU) bool {
-	arr := AVUArr(avus)
-	if !sort.IsSorted(arr) {
-		sort.Sort(arr)
-	}
-	i := sort.Search(len(arr), func(i int) bool {
-		return !AVULess(arr[i], avu)
-	})
+	m := make(map[AVU]struct{})
 
-	if i < len(arr) && avus[i] == avu {
-		return true
+	for _, avu := range avus {
+		m[avu] = struct{}{}
 	}
-	return false
+
+	_, ok := m[avu]
+	return ok
 }
 
 // SetIntersectAVUs returns a sorted slice of AVUs containing the intersection
@@ -138,17 +133,17 @@ func SetDiffAVUs(x []AVU, y []AVU) []AVU {
 // UniqAVUs returns a newly allocated, sorted slice of AVUs containing no
 // duplicates.
 func UniqAVUs(avus []AVU) []AVU {
-	uniq := make([]AVU, 0, len(avus))
-
-	for i, avu := range SortAVUs(avus) {
-		if i == 0 {
-			uniq = append(uniq, avu)
-		} else {
-			if avu != uniq[len(uniq)-1] {
-				uniq = append(uniq, avu)
-			}
-		}
+	m := make(map[AVU]struct{})
+	for _, avu := range avus {
+		m[avu] = struct{}{}
 	}
+
+	var uniq AVUArr
+	for avu, _ := range m {
+		uniq = append(uniq, avu)
+	}
+
+	sort.Sort(uniq)
 
 	return uniq
 }

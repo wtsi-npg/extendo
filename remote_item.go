@@ -143,36 +143,30 @@ func (path RemoteItem) ReplaceMetadata(avus []AVU) error {
 		}
 	}
 
-	var toAdd []AVU
-	for _, avu := range avus {
-		if !SearchAVU(avu, toKeep) {
-			toAdd = append(toAdd, avu)
-		}
-	}
+	toAdd := SetDiffAVUs(avus, toKeep)
 
 	rem := CopyRodsItem(*path.RodsItem)
 	rem.IAVUs = toRemove
 
 	log := logs.GetLogger()
-	if len(toRemove) > 0 {
-		log.Info().Str("path", path.String()).
-			Str("operation", "remove").Msgf("%+v", toRemove)
+	log.Debug().Str("path", path.String()).
+		Str("operation", "remove_avu").Msgf("%v", toRemove)
 
+	if len(toRemove) > 0 {
 		if _, err := path.client.MetaRem(Args{}, rem); err != nil {
 			return err
 		}
 	}
 
-	if len(toKeep) > 0 {
-		log.Info().Str("path", path.String()).
-			Str("operation", "none").Msgf("%+v", toKeep)
-	}
+	log.Debug().Str("path", path.String()).
+		Str("operation", "keep_avu").Msgf("%v", toKeep)
+
+	log.Debug().Str("path", path.String()).
+		Str("operation", "add_avu").Msgf("%+v", toAdd)
 
 	if len(toAdd) > 0 {
 		item := CopyRodsItem(*path.RodsItem)
 		item.IAVUs = toAdd
-		log.Info().Str("path", path.String()).
-			Str("operation", "item").Msgf("%+v", toAdd)
 
 		if _, err := path.client.MetaAdd(Args{}, item); err != nil {
 			return err
@@ -183,6 +177,9 @@ func (path RemoteItem) ReplaceMetadata(avus []AVU) error {
 	// again, but this saves a trip to the server.
 	var final AVUArr = SetUnionAVUs(toAdd, SetDiffAVUs(currentAVUs, toRemove))
 	sort.Sort(final)
+
+	log.Debug().Str("path", path.String()).Msgf("AVUs %v", final)
+
 	path.IAVUs = final
 
 	return err
