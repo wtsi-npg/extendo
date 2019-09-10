@@ -23,18 +23,14 @@ package extendo
 import "path/filepath"
 
 type Collection struct {
-	RemoteItem
+	*RemoteItem
 }
 
-func NewCollection(client *Client, remotePath string) (*Collection, error) {
+func NewCollection(client *Client, remotePath string) *Collection {
 	remotePath = filepath.Clean(remotePath)
 
-	item, err := client.ListItem(Args{}, RodsItem{IPath: remotePath})
-	if err != nil {
-		return nil, err
-	}
-
-	return &Collection{RemoteItem: RemoteItem{client, &item}}, err
+	return &Collection{RemoteItem: &RemoteItem{
+		client, &RodsItem{IPath: remotePath}}}
 }
 
 func MakeCollection(client *Client, remotePath string) (*Collection, error) {
@@ -50,7 +46,7 @@ func MakeCollection(client *Client, remotePath string) (*Collection, error) {
 		return nil, err
 	}
 
-	coll := &Collection{RemoteItem: RemoteItem{client, &item}}
+	coll := &Collection{RemoteItem: &RemoteItem{client, &item}}
 
 	return coll, err
 }
@@ -82,7 +78,7 @@ func PutCollection(client *Client, localPath string, remotePath string,
 		return nil, err
 	}
 
-	coll := &Collection{RemoteItem: RemoteItem{client, &item}}
+	coll := &Collection{RemoteItem: &RemoteItem{client, &item}}
 
 	return coll, err
 }

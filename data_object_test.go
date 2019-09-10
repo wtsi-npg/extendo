@@ -56,11 +56,21 @@ var _ = Describe("Make an existing DataObject instance from iRODS", func() {
 		client.StopIgnoreError()
 	})
 
+	When("a data object does not exist in iRODS", func() {
+		It("should be possible to make a DataObject instance", func() {
+			path := "/no/such/object.txt"
+			obj := ex.NewDataObject(client, path)
+			Expect(obj.Exists()).To(BeFalse())
+			Expect(obj.RodsPath()).To(Equal(path))
+			Expect(obj.LocalPath()).To(Equal(""))
+		})
+	})
+
+
 	When("a data object exists in iRODS", func() {
 		It("should be possible to make a DataObject instance", func() {
 			path := filepath.Join(workColl, "testdata/1/reads/fast5/reads1.fast5")
-			obj, err := ex.NewDataObject(client, path)
-			Expect(err).NotTo(HaveOccurred())
+			obj := ex.NewDataObject(client, path)
 			Expect(obj.Exists()).To(BeTrue())
 			Expect(obj.RodsPath()).To(Equal(path))
 			Expect(obj.LocalPath()).To(Equal(""))
@@ -97,11 +107,10 @@ var _ = Describe("Report that a DataObject exists", func() {
 		client.StopIgnoreError()
 	})
 
-	When("a collection exists", func() {
+	When("a data object exists", func() {
 		BeforeEach(func() {
 			path := filepath.Join(workColl, "testdata/1/reads/fast5/reads1.fast5")
-			obj, err = ex.NewDataObject(client, path)
-			Expect(err).NotTo(HaveOccurred())
+			obj = ex.NewDataObject(client, path)
 		})
 
 		When("Exists() is called", func() {
@@ -327,8 +336,7 @@ var _ = Describe("Replace metadata on a DataObject", func() {
 
 	Context("replacing metadata on data objects", func() {
 		BeforeEach(func() {
-			obj, err = ex.NewDataObject(client, remotePath)
-			Expect(err).NotTo(HaveOccurred())
+			obj = ex.NewDataObject(client, remotePath)
 
 			avuA0 = ex.MakeAVU("a", "0", "z")
 			avuA1 = ex.MakeAVU("a", "1")

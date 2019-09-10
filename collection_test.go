@@ -56,10 +56,19 @@ var _ = Describe("Make an existing Collection instance from iRODS", func() {
 		client.StopIgnoreError()
 	})
 
+	When("a collection does not exist in iRODS", func() {
+		It("should be possible to make a Collection instance", func() {
+			path := "/no/such/collection"
+			coll := ex.NewCollection(client, path)
+			Expect(coll.Exists()).To(BeFalse())
+			Expect(coll.RodsPath()).To(Equal(path))
+			Expect(coll.LocalPath()).To(Equal(""))
+		})
+	})
+
 	When("a collection exists in iRODS", func() {
 		It("should be possible to make a Collection instance", func() {
-			coll, err := ex.NewCollection(client, workColl)
-			Expect(err).NotTo(HaveOccurred())
+			coll := ex.NewCollection(client, workColl)
 			Expect(coll.Exists()).To(BeTrue())
 			Expect(coll.RodsPath()).To(Equal(workColl))
 			Expect(coll.LocalPath()).To(Equal(""))
@@ -98,7 +107,7 @@ var _ = Describe("Report that a Collection exists", func() {
 
 	When("a collection exists", func() {
 		BeforeEach(func() {
-			coll, err = ex.NewCollection(client, filepath.Join(workColl, "testdata"))
+			coll, err = ex.MakeCollection(client, filepath.Join(workColl, "testdata"))
 			Expect(err).NotTo(HaveOccurred())
 		})
 

@@ -31,21 +31,14 @@ type DataObject struct {
 	*RemoteItem
 }
 
-// NewDataObject makes a new instance, given a path to an existing data object
-// in iRODS.
-func NewDataObject(client *Client, remotePath string) (*DataObject, error) {
+// NewDataObject makes a new instance, given a path in iRODS (existing, or not).
+func NewDataObject(client *Client, remotePath string) *DataObject {
 	remotePath = filepath.Clean(remotePath)
 	path := filepath.Dir(remotePath)
 	name := filepath.Base(remotePath)
 
-	item, err := client.ListItem(Args{}, RodsItem{IPath: path, IName: name})
-	if err != nil {
-		return nil, err
-	}
-
-	obj := &DataObject{RemoteItem: &RemoteItem{client, &item}}
-
-	return obj, err
+	return &DataObject{&RemoteItem{
+		client, &RodsItem{IPath: path, IName: name}}}
 }
 
 // PutDataObject make a new instance by sending a file local at localPath
