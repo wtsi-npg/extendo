@@ -21,10 +21,9 @@
 package extendo
 
 import (
-	"path/filepath"
-
-	logs "github.com/kjsanger/logshim"
 	"github.com/pkg/errors"
+
+	"path/filepath"
 )
 
 type DataObject struct {
@@ -57,30 +56,40 @@ func PutDataObject(client *Client, localPath string, remotePath string,
 	name := filepath.Base(remotePath)
 
 	item := RodsItem{IDirectory: dir, IFile: file, IPath: path, IName: name}
-	putArgs := Args{Force: true, Checksum: true}
 
+	// BEGIN
+	//
+	// NB: iRODS 4.1.* does not honour the create checksum option for
+	// zero-length files. See https://github.com/irods/irods/issues/4502
+	// Neither does it always honour it when files are force-put over an
+	// existing file. In such a case it leaves a stale checksum (of the
+	// previous file) while updating the file itself. This is a workaround
+	// for these bugs:
+
+	// 1. Put without checksum
+	putArgs := Args{Force: true, Checksum: false}
 	if _, err := client.Put(putArgs, item); err != nil {
 		return nil, err
 	}
+	// 2. Make a second request to create the checksum
+	if _, err := client.Checksum(Args{}, item); err != nil {
+		return nil, err
+	}
+	// END
 
 	if len(avus) > 0 {
-		var x []AVU
-		for _, y := range avus {
-			x = append(x, y...)
+		var allAVUs []AVU
+		for _, x := range avus {
+			allAVUs = append(allAVUs, x...)
 		}
-		item.IAVUs = x
+		item.IAVUs = UniqAVUs(allAVUs)
 
 		if _, err := client.MetaAdd(Args{}, item); err != nil {
 			return nil, err
 		}
 	}
 
-	listArgs := Args{Checksum: true}
-	if len(avus) > 0 {
-		listArgs.AVU = true
-	}
-
-	item, err := client.ListItem(listArgs, item)
+	item, err := client.ListItem(Args{Checksum: true, AVU: true}, item)
 	if err != nil {
 		return nil, err
 	}
@@ -103,7 +112,7 @@ func PutDataObject(client *Client, localPath string, remotePath string,
 func ArchiveDataObject(client *Client, localPath string, remotePath string,
 	expectedChecksum string, avus ...[]AVU) (*DataObject, error) {
 
-	obj, err := PutDataObject(client, localPath, remotePath, avus...)
+	obj, err := PutDataObject(client, localPath, remotePath)
 	if err != nil {
 		return nil, err
 	}
@@ -119,11 +128,6 @@ func ArchiveDataObject(client *Client, localPath string, remotePath string,
 	for _, x := range avus {
 		allAVUs = append(allAVUs, x...)
 	}
-
-	logs.GetLogger().Debug().
-		Str("local_path", localPath).
-		Str("remote_path", remotePath).
-		Str("expected_checksum", expectedChecksum).Msg("archiving")
 
 	err = obj.ReplaceMetadata(UniqAVUs(allAVUs))
 
@@ -208,6 +212,42 @@ func (obj *DataObject) FetchChecksum() (string, error) {
 	obj.IChecksum = checksum
 
 	return obj.IChecksum, err
+}
+
+func (obj *DataObject) HasValidChecksum(expected string) (bool, error) {
+	if len(expected) == 0 {
+		return false, errors.New("expected checksum was empty")
+	}
+
+	checksum, err := obj.FetchChecksum()
+	if err != nil {
+		return false, err
+	}
+
+	if len(checksum) == 0 {
+		return false, err
+	}
+
+	return checksum == expected, err
+}
+
+func (obj *DataObject) HasValidChecksumMetadata(expected string) (bool, error) {
+	if len(expected) == 0 {
+		return false, errors.New("expected checksum was empty")
+	}
+
+	avus, err := obj.FetchMetadata()
+	if err != nil {
+		return false, err
+	}
+
+	for _, avu := range avus {
+		if avu.Attr == ChecksumAttr && avu.Value == expected {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }
 
 func (obj *DataObject) Replicates() []Replicate {
