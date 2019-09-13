@@ -29,6 +29,10 @@ import (
 	dcterms "github.com/kjsanger/extendo/dublincore"
 )
 
+const ChecksumAttr string = "md5"
+
+type AVUFilter func(avu AVU) bool
+
 func MakeAVU(attr string, value string, units ...string) AVU {
 	var unit string
 	if len(units) > 0 {
@@ -38,7 +42,7 @@ func MakeAVU(attr string, value string, units ...string) AVU {
 	return AVU{Attr: attr, Value: value, Units: unit}
 }
 
-func MakeCreationMetadata() []AVU {
+func MakeCreationMetadata(checksum string) []AVU {
 	when := time.Now().Format(time.RFC3339)
 	who, err := user.Current()
 	if err != nil {
@@ -52,6 +56,7 @@ func MakeCreationMetadata() []AVU {
 		MakeAVU(dcterms.Created, when),
 		MakeAVU(dcterms.Creator, "http://www.sanger.ac.uk"),
 		MakeAVU(dcterms.Publisher, publisher),
+		MakeAVU(ChecksumAttr, checksum),
 	}
 }
 
@@ -65,6 +70,17 @@ func SearchAVU(avu AVU, avus []AVU) bool {
 
 	_, ok := m[avu]
 	return ok
+}
+
+func FilterAVUs(avus []AVU, f AVUFilter) []AVU {
+	var match []AVU
+	for _, avu := range avus {
+		if f(avu) {
+			match = append(match, avu)
+		}
+	}
+
+	return match
 }
 
 // SetIntersectAVUs returns a sorted slice of AVUs containing the intersection

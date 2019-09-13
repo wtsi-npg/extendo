@@ -265,7 +265,7 @@ var _ = Describe("Archive a DataObject into iRODS", func() {
 
 		When("metadata are supplied", func() {
 			It("should be present afterwards", func() {
-				creationMeta := ex.MakeCreationMetadata()
+				creationMeta := ex.MakeCreationMetadata(newChecksum)
 				extraMeta := []ex.AVU{
 					ex.MakeAVU("x", "y"),
 					ex.MakeAVU("a", "b")}
