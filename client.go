@@ -309,9 +309,11 @@ func (client *Client) Start(arg ...string) (*Client, error) {
 				} else if re == io.EOF {
 					log.Debug().Str("executable", client.path).
 						Msg("reached EOF on stdout")
+					return
 				} else {
 					log.Error().Err(re).Str("executable", client.path).
 						Msg("read error on stdout")
+					return
 				}
 			}
 		}
@@ -334,9 +336,11 @@ func (client *Client) Start(arg ...string) (*Client, error) {
 				} else if re == io.EOF {
 					log.Debug().Str("executable", client.path).
 						Msg("reached EOF on stderr")
+					return
 				} else {
 					log.Error().Err(re).Str("executable", client.path).
 						Msg("read error on stderr")
+					return
 				}
 			}
 		}
