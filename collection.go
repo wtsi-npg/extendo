@@ -83,6 +83,20 @@ func PutCollection(client *Client, localPath string, remotePath string,
 	return coll, err
 }
 
+func (coll *Collection) Ensure() error {
+	exists, err := coll.Exists()
+	if err != nil {
+		return err
+	}
+	if !exists {
+		if _, err:= MakeCollection(coll.client, coll.RodsPath()); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (coll *Collection) Remove() error {
 	_, err := coll.RemoteItem.client.
 		RemDir(Args{}, *coll.RemoteItem.RodsItem)
