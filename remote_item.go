@@ -119,6 +119,7 @@ func (path RemoteItem) RemoveMetadata(avus []AVU) error {
 // ReplaceMetadata removes from a RodsItem any existing AVUs sharing an attribute
 // with the argument AVUs and then adds to the RodsItem the argument AVUs.
 func (path RemoteItem) ReplaceMetadata(avus []AVU) error {
+
 	// Attributes whose AVUs are to be replaced
 	repAttrs := make(map[string]struct{})
 	for _, avu := range avus {
@@ -162,7 +163,7 @@ func (path RemoteItem) ReplaceMetadata(avus []AVU) error {
 		Str("operation", "keep_avu").Msgf("%v", toKeep)
 
 	log.Debug().Str("path", path.String()).
-		Str("operation", "add_avu").Msgf("%+v", toAdd)
+		Str("operation", "add_avu").Msgf("%v", toAdd)
 
 	if len(toAdd) > 0 {
 		item := CopyRodsItem(*path.RodsItem)
