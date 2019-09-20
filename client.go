@@ -332,7 +332,8 @@ func (client *Client) Start(arg ...string) (*Client, error) {
 				bout, re := rd.ReadBytes('\n')
 				if re == nil {
 					out := bytes.TrimRight(bout, "\r\n")
-					log.Warn().Msg(string(out))
+					log.Debug().Str("stderr", client.path).
+						Msg(string(out))
 				} else if re == io.EOF {
 					log.Debug().Str("executable", client.path).
 						Msg("reached EOF on stderr")
