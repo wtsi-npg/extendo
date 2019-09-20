@@ -24,7 +24,6 @@ import (
 	"sort"
 
 	logs "github.com/kjsanger/logshim"
-	"github.com/pkg/errors"
 )
 
 type RemoteItem struct {
@@ -35,16 +34,16 @@ type RemoteItem struct {
 func (path RemoteItem) Exists() (bool, error) {
 	_, err := path.client.ListItem(Args{}, *path.RodsItem)
 	if err != nil {
-		switch err := errors.Cause(err).(type) {
-		case *RodsError:
-			if err.Code() == RodsUserFileDoesNotExist {
+		if IsRodsError(err) {
+			code, cerr := RodsErrorCode(err)
+			if cerr == nil && code == RodsUserFileDoesNotExist {
 				return false, nil
 			}
-			return false, err
 
-		default:
-			return false, err
+			return false, err // Return original error
 		}
+
+		return false, err
 	}
 
 	return true, nil
