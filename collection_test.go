@@ -211,3 +211,51 @@ var _ = Describe("Put a Collection into iRODS", func() {
 		})
 	})
 })
+
+var _ = Describe("Ensure that a Collection exists", func() {
+	var (
+		client *ex.Client
+		err    error
+
+		rootColl string
+		workColl string
+	)
+
+	BeforeEach(func() {
+		client, err = ex.FindAndStart(batonArgs...)
+		Expect(err).NotTo(HaveOccurred())
+
+		rootColl = "/testZone/home/irods"
+		workColl = tmpRodsPath(rootColl, "ExtendoEnsureCollection")
+	})
+
+	AfterEach(func() {
+		err = removeTestData(workColl)
+		Expect(err).NotTo(HaveOccurred())
+
+		client.StopIgnoreError()
+	})
+
+	When("a leaf collection does not exist", func() {
+		It("should be created", func() {
+			path := filepath.Join(workColl, "my_new_collection")
+			coll := ex.NewCollection(client, path)
+			err = coll.Ensure()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(coll.Exists()).To(BeTrue())
+			Expect(coll.RodsPath()).To(Equal(path))
+		})
+	})
+
+	When("a branch collection does not exist", func() {
+		It("should be created", func() {
+			path := filepath.Join(workColl, "my_new_collection/and_another/and_finally")
+			coll := ex.NewCollection(client, path)
+			err = coll.Ensure()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(coll.Exists()).To(BeTrue())
+			Expect(coll.RodsPath()).To(Equal(path))
+		})
+	})
+
+})
