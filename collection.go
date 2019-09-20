@@ -20,7 +20,13 @@
 
 package extendo
 
-import "path/filepath"
+import (
+	"path/filepath"
+	"time"
+
+	logs "github.com/kjsanger/logshim"
+	"github.com/pkg/errors"
+)
 
 type Collection struct {
 	*RemoteItem
@@ -41,12 +47,39 @@ func MakeCollection(client *Client, remotePath string) (*Collection, error) {
 		return nil, err
 	}
 
-	item, err = client.ListItem(Args{}, item)
-	if err != nil {
-		return nil, err
+	coll := &Collection{RemoteItem: &RemoteItem{client, &item}}
+
+	// iRODS should not return from MakeCollection until the collection is
+	// made. However, I have observed that the iRODS 4.1.12 server will do so,
+	// leading to the failure of any operations the client performs on the
+	// returned collection.
+	//
+	// This retry is a workaround to block and wait for the collection to
+	// appear. It's quite ugly, but simple and fixes
+
+	log := logs.GetLogger()
+
+	var exists bool
+	maxTries, backoffFactor := 3, 2
+
+	for try := 0; try < maxTries; try++ {
+		exists, err = coll.Exists()
+		if exists || err != nil {
+			break
+		}
+
+		delay := try * backoffFactor
+		log.Debug().Str("path", remotePath).
+			Int("try", try).Int("seconds", delay).
+			Msg("waiting for collection to appear")
+
+		time.Sleep(time.Second * time.Duration(delay))
 	}
 
-	coll := &Collection{RemoteItem: &RemoteItem{client, &item}}
+	if !exists {
+		err = errors.Errorf("timed out waiting for "+
+			"collection '%s' to appear", remotePath)
+	}
 
 	return coll, err
 }
@@ -89,7 +122,7 @@ func (coll *Collection) Ensure() error {
 		return err
 	}
 	if !exists {
-		if _, err:= MakeCollection(coll.client, coll.RodsPath()); err != nil {
+		if _, err := MakeCollection(coll.client, coll.RodsPath()); err != nil {
 			return err
 		}
 	}
