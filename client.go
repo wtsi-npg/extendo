@@ -33,6 +33,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	logs "github.com/kjsanger/logshim"
 	"github.com/pkg/errors"
@@ -58,6 +59,11 @@ const (
 	RodsCatCollectionNotEmpty = int32(-821000) // iRODS: collection not empty
 )
 
+// Timeout for the baton-do sub-process to respond or confirm that it is still
+// running. Significant response times can be real, for example responding
+// after a put operation on 1 TiB of data.
+var DefaultResponseTimeout = 5 * time.Second
+
 // Client is a launcher for a baton sub-process which holds its system I/O
 // streams and its channels.
 type Client struct {
@@ -68,6 +74,9 @@ type Client struct {
 	stderr      io.ReadCloser      // stderr of the sub-process, once started.
 	in          chan []byte        // For sending to the sub-process.
 	out         chan []byte        // For receiving from the sub-process.
+	err         chan error         // For recording any sub-process error.
+	running     bool               // Flag indicating that the sub-process is running.
+	respTimeout time.Duration      // Timeout for the sub-process to respond.
 	cancel      context.CancelFunc // For stopping the I/O goroutines.
 	ioWaitGroup *sync.WaitGroup    // WaitGroup for I/O goroutines.
 }
@@ -255,13 +264,14 @@ func (client *Client) Start(arg ...string) (*Client, error) {
 	}
 
 	// Sub-process input and response synchronisation
-	in := make(chan []byte)
-	out := make(chan []byte)
+	pin := make(chan []byte)
+	pout := make(chan []byte)
+	perr := make(chan error, 1)
 
 	// I/O goroutine cancelling and cleanup
 	cancelCtx, cancel := context.WithCancel(context.Background())
 	var wg sync.WaitGroup
-	wg.Add(3) // The stdin, stdout and stderr goroutines
+	wg.Add(4) // The stdin, stdout, stderr and wait goroutines
 
 	// Send messages to the baton sub-process
 	go func(ctx context.Context) {
@@ -276,7 +286,7 @@ func (client *Client) Start(arg ...string) (*Client, error) {
 						Msg("failed to close stdin")
 				}
 				return
-			case buf := <-in:
+			case buf := <-pin:
 				n, werr := stdin.Write(append(buf, '\n'))
 
 				if werr != nil {
@@ -290,7 +300,7 @@ func (client *Client) Start(arg ...string) (*Client, error) {
 		}
 	}(cancelCtx)
 
-	// Receive messages from the baton sub-process
+	// Receive messages from the baton sub-process STDOUT
 	go func(ctx context.Context) {
 		defer wg.Done()
 
@@ -302,10 +312,10 @@ func (client *Client) Start(arg ...string) (*Client, error) {
 				return
 			default:
 				// On cancelling, this is unblocked by the send goroutine
-				// closing stdin
+				// closing stdin and we should reach EOF
 				bout, re := rd.ReadBytes('\n')
 				if re == nil {
-					out <- bytes.TrimRight(bout, "\r\n")
+					pout <- bytes.TrimRight(bout, "\r\n")
 				} else if re == io.EOF {
 					log.Debug().Str("executable", client.path).
 						Msg("reached EOF on stdout")
@@ -319,6 +329,7 @@ func (client *Client) Start(arg ...string) (*Client, error) {
 		}
 	}(cancelCtx)
 
+	// Handle baton sub-process STDERR
 	go func(ctx context.Context) {
 		defer wg.Done()
 
@@ -329,6 +340,8 @@ func (client *Client) Start(arg ...string) (*Client, error) {
 			case <-ctx.Done():
 				return
 			default:
+				// On cancelling, this is unblocked by the send goroutine
+				// closing stdin and we should reach EOF
 				bout, re := rd.ReadBytes('\n')
 				if re == nil {
 					out := bytes.TrimRight(bout, "\r\n")
@@ -347,12 +360,24 @@ func (client *Client) Start(arg ...string) (*Client, error) {
 		}
 	}(cancelCtx)
 
+	// Watch for baton sub-process completion and capture any error
+	go func() {
+		defer wg.Done()
+		perr := cmd.Wait()
+
+		client.running = false
+		client.err <- perr
+	}()
+
 	client.cmd = cmd
 	client.stdin = stdin
 	client.stdout = stdout
 	client.stderr = stderr
-	client.in = in
-	client.out = out
+	client.in = pin
+	client.out = pout
+	client.err = perr
+	client.running = true
+	client.respTimeout = DefaultResponseTimeout
 	client.cancel = cancel
 	client.ioWaitGroup = &wg
 
@@ -362,20 +387,22 @@ func (client *Client) Start(arg ...string) (*Client, error) {
 // Stop stops the baton sub-process, if it is running. Returns any error
 // from the sub-process.
 func (client *Client) Stop() error {
-	if !client.IsRunning() {
-		return nil
-	}
-
 	client.cancel()
 	client.ioWaitGroup.Wait()
-	return client.cmd.Wait()
+
+	return <-client.err
 }
 
 // Stop stops the baton sub-process, if it is running. Ignores any error
 // from the sub-process.
 func (client *Client) StopIgnoreError() {
+	if !client.IsRunning() {
+		return
+	}
+	pid := client.ClientPid()
 	if err := client.Stop(); err != nil {
-		logs.GetLogger().Error().Err(err).Msg("stopped client")
+		logs.GetLogger().Error().Err(err).Int("pid", pid).
+			Msg("stopped client")
 	}
 }
 
@@ -388,11 +415,8 @@ func (client *Client) ClientPid() int {
 	return -1
 }
 
-// IsRunning returns true if the baton sub-process is running, or false
-// otherwise.
 func (client *Client) IsRunning() bool {
-	return client.cmd != nil && client.cmd.Process != nil &&
-		!(client.cmd.ProcessState != nil && client.cmd.ProcessState.Exited())
+	return client.running
 }
 
 // Chmod sets permissions on a collection or data object in iRODS. By setting
@@ -656,6 +680,10 @@ func (client *Client) putRecurse(args Args, item RodsItem) ([]RodsItem, error) {
 
 func (client *Client) execute(op string, args Args, item RodsItem) ([]RodsItem,
 	error) {
+	if !client.IsRunning() {
+		return []RodsItem{}, errors.New("client is not running")
+	}
+
 	response, err := client.send(wrap(op, args, item))
 	if err != nil {
 		return nil, err
@@ -674,8 +702,26 @@ func (client *Client) send(envelope *Envelope) (*Envelope, error) {
 
 	log.Debug().Msgf("Sending %s", jsonMessage)
 	client.in <- jsonMessage
-	jsonResponse := <-client.out
-	log.Debug().Msgf("Received %s", jsonResponse)
+
+	var jsonResponse []byte
+
+waitResponse:
+	for {
+		select {
+		case jsonResponse = <-client.out:
+			log.Debug().Msgf("Received %s", jsonResponse)
+			break waitResponse
+
+		case <-time.After(client.respTimeout):
+			// If the sub-process is running we just wait again, until either
+			// it responds or stops running.
+			if !client.IsRunning() {
+				return nil, errors.New("receiving failed")
+			}
+			log.Debug().Str("executable", client.path).
+				Msg("receiving timed out, waiting again ...")
+		}
+	}
 
 	response := &Envelope{}
 	if err = json.Unmarshal(jsonResponse, response); err != nil {
