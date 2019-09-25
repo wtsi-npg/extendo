@@ -64,7 +64,7 @@ var (
 func NewClientPool(maxSize uint8, timeout time.Duration,
 	clientArgs ...string) *ClientPool {
 
-	processedArgs := []string{"--unbuffered"} // Always need this
+	processedArgs := []string{"--unbuffered", "--no-error"} // Always need this
 	processedArgs = utilities.Uniq(append(processedArgs, clientArgs...))
 
 	pool := ClientPool{
