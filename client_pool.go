@@ -50,7 +50,6 @@ type ClientPool struct {
 }
 
 var (
-	errPoolNil    = errors.New("pool receiver was nil")
 	errPoolClosed = errors.New("the client pool is closed")
 	errDeadClient = errors.New("dead client in the client pool")
 	errGetTimeout = errors.New("timeout getting client from the pool")
@@ -80,10 +79,6 @@ func NewClientPool(maxSize uint8, timeout time.Duration,
 
 // IsOpen returns true if the pool is open.
 func (pool *ClientPool) IsOpen() bool {
-	if pool == nil {
-		return false
-	}
-
 	return pool.isOpen
 }
 
@@ -91,9 +86,6 @@ func (pool *ClientPool) IsOpen() bool {
 // an error if the pool is closed, if the attempt to get a Client exceeds the
 // pool's timeout, or if an error is encountered creating the Client.
 func (pool *ClientPool) Get() (*Client, error) {
-	if pool == nil {
-		return nil, errPoolNil
-	}
 	if !pool.IsOpen() {
 		return nil, errPoolClosed
 	}
@@ -170,10 +162,6 @@ func (pool *ClientPool) getWithTimeout() (*Client, error) {
 // be created. If the pool has been closed, clients may still be returned,
 // where they will be stopped and any errors from this ignored.
 func (pool *ClientPool) Return(client *Client) error {
-	if pool == nil {
-		return errPoolNil
-	}
-
 	log := logs.GetLogger()
 	if !pool.IsOpen() {
 		log.Debug().Msg("returned 1 client to a closed pool")
@@ -203,9 +191,6 @@ func (pool *ClientPool) Return(client *Client) error {
 // Close closes the pool for further Get() operations. Clients may still be
 // returned to a closed pool, see Return.
 func (pool *ClientPool) Close() {
-	if pool == nil {
-		return
-	}
 	if !pool.IsOpen() {
 		return
 	}
