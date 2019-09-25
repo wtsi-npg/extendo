@@ -21,6 +21,7 @@
 package extendo
 
 import (
+	"sync"
 	"time"
 
 	logs "github.com/kjsanger/logshim"
@@ -47,6 +48,7 @@ type ClientPool struct {
 	slots      semaphore     // Slots available to create new clients
 	timeout    time.Duration // Timeout for Get calls
 	maxRetries uint8         // Max retries for Get calls
+	sync.Mutex               // Enable locking for Get/Return/Close
 }
 
 var (
@@ -86,6 +88,9 @@ func (pool *ClientPool) IsOpen() bool {
 // an error if the pool is closed, if the attempt to get a Client exceeds the
 // pool's timeout, or if an error is encountered creating the Client.
 func (pool *ClientPool) Get() (*Client, error) {
+	pool.Lock()
+	defer pool.Unlock()
+
 	if !pool.IsOpen() {
 		return nil, errPoolClosed
 	}
@@ -162,6 +167,9 @@ func (pool *ClientPool) getWithTimeout() (*Client, error) {
 // be created. If the pool has been closed, clients may still be returned,
 // where they will be stopped and any errors from this ignored.
 func (pool *ClientPool) Return(client *Client) error {
+	pool.Lock()
+	defer pool.Unlock()
+
 	log := logs.GetLogger()
 	if !pool.IsOpen() {
 		log.Debug().Msg("returned 1 client to a closed pool")
@@ -191,6 +199,9 @@ func (pool *ClientPool) Return(client *Client) error {
 // Close closes the pool for further Get() operations. Clients may still be
 // returned to a closed pool, see Return.
 func (pool *ClientPool) Close() {
+	pool.Lock()
+	defer pool.Unlock()
+
 	if !pool.IsOpen() {
 		return
 	}
