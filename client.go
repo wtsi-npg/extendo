@@ -33,6 +33,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	logs "github.com/kjsanger/logshim"
@@ -65,20 +66,22 @@ const (
 var DefaultResponseTimeout = 5 * time.Second
 
 // Client is a launcher for a baton sub-process which holds its system I/O
-// streams and its channels.
+// streams and its channels. If accessed from more than one goroutine,
+// instances must be externally synchronised.
 type Client struct {
-	path        string             // Path of the baton executable.
-	cmd         *exec.Cmd          // Cmd of the sub-process, once started.
-	stdin       io.WriteCloser     // stdin of the sub-process, once started.
-	stdout      io.ReadCloser      // stdout of the sub-process, once started.
-	stderr      io.ReadCloser      // stderr of the sub-process, once started.
-	in          chan []byte        // For sending to the sub-process.
-	out         chan []byte        // For receiving from the sub-process.
-	err         chan error         // For recording any sub-process error.
-	running     bool               // Flag indicating that the sub-process is running.
-	respTimeout time.Duration      // Timeout for the sub-process to respond.
-	cancel      context.CancelFunc // For stopping the I/O goroutines.
-	ioWaitGroup *sync.WaitGroup    // WaitGroup for I/O goroutines.
+	path        string              // Path of the baton executable.
+	cmd         *exec.Cmd           // Cmd of the sub-process, once started.
+	stdin       io.WriteCloser      // stdin of the sub-process, once started.
+	stdout      io.ReadCloser       // stdout of the sub-process, once started.
+	stderr      io.ReadCloser       // stderr of the sub-process, once started.
+	in           chan []byte        // For sending to the sub-process.
+	out          chan []byte        // For receiving from the sub-process.
+	err          chan error         // For recording any sub-process error.
+	running      bool               // Flag indicating that the sub-process is running.
+	respTimeout  time.Duration      // Timeout for the sub-process to respond.
+	cancel       context.CancelFunc // For stopping the I/O goroutines.
+	inWaitGroup  *sync.WaitGroup    // WaitGroup for STDIN goroutine.
+	outWaitGroup *sync.WaitGroup    // WaitGroup for STDOUT/STDERR goroutines.
 }
 
 // Envelope is the JSON document accepted by baton-do, describing an operation
@@ -259,6 +262,11 @@ func (client *Client) Start(arg ...string) (*Client, error) {
 		return nil, err
 	}
 
+	// Start in its own process group. This allows a more graceful shutdown
+	// when stopped with ^C in the shell. The baton-do process won't get the
+	// SIGINT and will be stopped by the parent process.
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pgid: 0}
+
 	if err = cmd.Start(); err != nil {
 		return nil, err
 	}
@@ -270,12 +278,16 @@ func (client *Client) Start(arg ...string) (*Client, error) {
 
 	// I/O goroutine cancelling and cleanup
 	cancelCtx, cancel := context.WithCancel(context.Background())
-	var wg sync.WaitGroup
-	wg.Add(4) // The stdin, stdout, stderr and wait goroutines
+
+	var inWg sync.WaitGroup
+	inWg.Add(1)
+
+	var outWg sync.WaitGroup
+	outWg.Add(2) // The stdout, stderr goroutines
 
 	// Send messages to the baton sub-process
 	go func(ctx context.Context) {
-		defer wg.Done()
+		defer inWg.Done()
 
 		for {
 			select {
@@ -302,7 +314,7 @@ func (client *Client) Start(arg ...string) (*Client, error) {
 
 	// Receive messages from the baton sub-process STDOUT
 	go func(ctx context.Context) {
-		defer wg.Done()
+		defer outWg.Done()
 
 		rd := bufio.NewReader(stdout)
 
@@ -331,7 +343,7 @@ func (client *Client) Start(arg ...string) (*Client, error) {
 
 	// Handle baton sub-process STDERR
 	go func(ctx context.Context) {
-		defer wg.Done()
+		defer outWg.Done()
 
 		rd := bufio.NewReader(stderr)
 
@@ -362,7 +374,8 @@ func (client *Client) Start(arg ...string) (*Client, error) {
 
 	// Watch for baton sub-process completion and capture any error
 	go func() {
-		defer wg.Done()
+		inWg.Wait()
+		outWg.Wait()
 		perr := cmd.Wait()
 
 		client.running = false
@@ -379,7 +392,8 @@ func (client *Client) Start(arg ...string) (*Client, error) {
 	client.running = true
 	client.respTimeout = DefaultResponseTimeout
 	client.cancel = cancel
-	client.ioWaitGroup = &wg
+	client.inWaitGroup = &inWg
+	client.outWaitGroup = &outWg
 
 	return client, err
 }
@@ -388,7 +402,6 @@ func (client *Client) Start(arg ...string) (*Client, error) {
 // from the sub-process.
 func (client *Client) Stop() error {
 	client.cancel()
-	client.ioWaitGroup.Wait()
 
 	return <-client.err
 }
