@@ -268,7 +268,6 @@ var _ = Describe("List a Collection contents", func() {
 		rootColl string
 		workColl string
 
-		expected []string
 		getRodsPaths func(i []ex.RodsItem) []string
 	)
 
@@ -307,18 +306,21 @@ var _ = Describe("List a Collection contents", func() {
 
 	When("a collection contents are fetched without recursion", func() {
 		It("should return the shallow contents", func() {
-			expected = []string{"testdata/1", "testdata/testdir"}
+			expected := []string{"testdata/1", "testdata/testdir"}
 
 			coll := ex.NewCollection(client, filepath.Join(workColl, "testdata"))
 			items, err := coll.FetchContents()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(items).To(WithTransform(getRodsPaths, ConsistOf(expected)))
+
+			Expect(coll.Collections()).To(HaveLen(2))
+			Expect(coll.DataObjects()).To(BeEmpty())
 		})
 	})
 
 	When("a collection contents are fetched with recursion", func() {
 		It("should return the deep contents", func() {
-			expected = []string{
+			expected := []string{
 				"testdata",
 				"testdata/1",
 				"testdata/1/reads",
@@ -340,6 +342,9 @@ var _ = Describe("List a Collection contents", func() {
 			items, err := coll.FetchContentsRecurse()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(items).To(WithTransform(getRodsPaths, ConsistOf(expected)))
+
+			Expect(coll.Collections()).To(HaveLen(6))
+			Expect(coll.DataObjects()).To(HaveLen(9))
 		})
 	})
 })

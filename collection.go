@@ -29,14 +29,13 @@ import (
 )
 
 type Collection struct {
-	*RemoteItem
+	*RodsItem
 }
 
 func NewCollection(client *Client, remotePath string) *Collection {
 	remotePath = filepath.Clean(remotePath)
 
-	return &Collection{RemoteItem: &RemoteItem{
-		client, &RodsItem{IPath: remotePath}}}
+	return &Collection{&RodsItem{client: client, IPath: remotePath}}
 }
 
 func MakeCollection(client *Client, remotePath string) (*Collection, error) {
@@ -47,7 +46,8 @@ func MakeCollection(client *Client, remotePath string) (*Collection, error) {
 		return nil, err
 	}
 
-	coll := &Collection{RemoteItem: &RemoteItem{client, &item}}
+	item.client = client
+	coll := &Collection{&item}
 
 	// iRODS should not return from MakeCollection until the collection is
 	// made. However, I have observed that the iRODS 4.1.12 server will do so,
@@ -111,7 +111,8 @@ func PutCollection(client *Client, localPath string, remotePath string,
 		return nil, err
 	}
 
-	coll := &Collection{RemoteItem: &RemoteItem{client, &item}}
+	item.client = client
+	coll := &Collection{ &item}
 
 	return coll, err
 }
@@ -131,67 +132,45 @@ func (coll *Collection) Ensure() error {
 }
 
 func (coll *Collection) Remove() error {
-	_, err := coll.RemoteItem.client.
-		RemDir(Args{}, *coll.RemoteItem.RodsItem)
+	_, err := coll.client.RemDir(Args{}, *coll.RodsItem)
 	return err
 }
 
 func (coll *Collection) RemoveRecurse() error {
-	_, err := coll.RemoteItem.client.
-		RemDir(Args{Recurse: true}, *coll.RemoteItem.RodsItem)
+	_, err := coll.client.RemDir(Args{Recurse: true}, *coll.RodsItem)
 	return err
 }
 
-func (coll *Collection) Exists() (bool, error) {
-	return coll.RemoteItem.Exists()
+// Contents returns the Collections from the collection contents. If the
+// contents have not been Fetched, the slice will be empty.
+func (coll *Collection) Collections() []Collection {
+	var colls []Collection
+
+	for _, item := range coll.Contents() {
+		if item.IsCollection() {
+			colls = append(colls, Collection{&item})
+		}
+	}
+
+	return colls
 }
 
-func (coll *Collection) LocalPath() string {
-	return coll.RemoteItem.LocalPath()
+// Contents returns the DataObjects from the collection contents. If the
+// contents have not been Fetched, the slice will be empty.
+func (coll *Collection) DataObjects() []DataObject {
+	var objs []DataObject
+
+	for _, item := range coll.Contents() {
+		if item.IsDataObject() {
+			objs = append(objs, DataObject{&item})
+		}
+	}
+
+	return objs
 }
 
-func (coll *Collection) RodsPath() string {
-	return coll.RemoteItem.RodsPath()
-}
-
-func (coll *Collection) String() string {
-	return coll.RemoteItem.String()
-}
-
-func (coll *Collection) ACLs() []ACL {
-	return coll.IACLs
-}
-
-func (coll *Collection) FetchACLs() ([]ACL, error) {
-	return coll.RemoteItem.FetchACLs()
-}
-
-func (coll *Collection) AddACLs(acls []ACL) error {
-	return coll.RemoteItem.AddACLs(acls)
-}
-
-func (coll *Collection) Metadata() []AVU {
-	return coll.IAVUs
-}
-
-func (coll *Collection) FetchMetadata() ([]AVU, error) {
-	return coll.RemoteItem.FetchMetadata()
-}
-
-func (coll *Collection) AddMetadata(avus []AVU) error {
-	return coll.RemoteItem.AddMetadata(avus)
-}
-
-func (coll *Collection) RemoveMetadata(avus []AVU) error {
-	return coll.RemoteItem.RemoveMetadata(avus)
-}
-
-func (coll *Collection) ReplaceMetadata(avus []AVU) error {
-	return coll.RemoteItem.ReplaceMetadata(avus)
-}
-
-// Contents returns a shallow list of the collection contents. If the contents
-// have not been Fetched, the slice will be empty.
+// Contents returns the collection contents. If the contents have not been
+// Fetched, the slice will be empty.
 func (coll *Collection) Contents() []RodsItem {
 	var items []RodsItem
 
@@ -204,15 +183,28 @@ func (coll *Collection) Contents() []RodsItem {
 	return coll.IContents
 }
 
-// FetchContents returns a shallow list of the collection contents, freshly
+// FetchContents returns a shallow list of the item contents, freshly
 // fetched from the server. It caches the slice for future calls to Contents.
 func (coll *Collection) FetchContents() ([]RodsItem, error) {
-	return coll.RemoteItem.FetchContents()
+	it, err := coll.client.ListItem(Args{Contents: true, Recurse: false}, *coll.RodsItem)
+	if err != nil {
+		return []RodsItem{}, err
+	}
+
+	coll.IContents = it.IContents
+
+	return coll.IContents, err
 }
 
-// FetchContentsRecurse returns a recursive list of the collection contents,
+// FetchContentsRecurse returns a recursive list of the item contents,
 // freshly fetched from the server. It caches the slice for future calls to
 // Contents.
 func (coll *Collection) FetchContentsRecurse() ([]RodsItem, error) {
-	return coll.RemoteItem.FetchContentsRecurse()
+	items, err := coll.client.List(Args{Contents: true, Recurse: true}, *coll.RodsItem)
+	if err != nil {
+		return []RodsItem{}, err
+	}
+	coll.IContents = items
+
+	return coll.IContents, err
 }

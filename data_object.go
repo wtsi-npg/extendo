@@ -27,7 +27,7 @@ import (
 )
 
 type DataObject struct {
-	*RemoteItem
+	*RodsItem
 }
 
 // NewDataObject makes a new instance, given a path in iRODS (existing, or not).
@@ -36,8 +36,7 @@ func NewDataObject(client *Client, remotePath string) *DataObject {
 	path := filepath.Dir(remotePath)
 	name := filepath.Base(remotePath)
 
-	return &DataObject{&RemoteItem{
-		client, &RodsItem{IPath: path, IName: name}}}
+	return &DataObject{&RodsItem{client:client, IPath: path, IName: name}}
 }
 
 // PutDataObject make a new instance by sending a file local at localPath
@@ -93,8 +92,9 @@ func PutDataObject(client *Client, localPath string, remotePath string,
 	if err != nil {
 		return nil, err
 	}
+	item.client = client
 
-	obj := &DataObject{RemoteItem: &RemoteItem{client, &item}}
+	obj := &DataObject{&item}
 
 	return obj, err
 }
@@ -134,57 +134,10 @@ func ArchiveDataObject(client *Client, localPath string, remotePath string,
 	return obj, err
 }
 
+// Remove removes (deletes) the data object.
 func (obj *DataObject) Remove() error {
-	_, err := obj.RemoteItem.client.RemObj(Args{}, *obj.RemoteItem.RodsItem)
+	_, err := obj.client.RemObj(Args{}, *obj.RodsItem)
 	return err
-}
-
-func (obj *DataObject) Exists() (bool, error) {
-	return obj.RemoteItem.Exists()
-}
-
-func (obj *DataObject) LocalPath() string {
-	return obj.RemoteItem.LocalPath()
-}
-
-func (obj *DataObject) RodsPath() string {
-	return obj.RemoteItem.RodsPath()
-}
-
-func (obj *DataObject) String() string {
-	return obj.RemoteItem.String()
-}
-
-func (obj *DataObject) ACLs() []ACL {
-	return obj.IACLs
-}
-
-func (obj *DataObject) FetchACLs() ([]ACL, error) {
-	return obj.RemoteItem.FetchACLs()
-}
-
-func (obj *DataObject) AddACLs(acls []ACL) error {
-	return obj.RemoteItem.AddACLs(acls)
-}
-
-func (obj *DataObject) Metadata() []AVU {
-	return obj.IAVUs
-}
-
-func (obj *DataObject) FetchMetadata() ([]AVU, error) {
-	return obj.RemoteItem.FetchMetadata()
-}
-
-func (obj *DataObject) AddMetadata(avus []AVU) error {
-	return obj.RemoteItem.AddMetadata(avus)
-}
-
-func (obj *DataObject) RemoveMetadata(avus []AVU) error {
-	return obj.RemoteItem.RemoveMetadata(avus)
-}
-
-func (obj *DataObject) ReplaceMetadata(avus []AVU) error {
-	return obj.RemoteItem.ReplaceMetadata(avus)
 }
 
 func (obj *DataObject) Checksum() string {
@@ -192,9 +145,7 @@ func (obj *DataObject) Checksum() string {
 }
 
 func (obj *DataObject) CalculateChecksum() (string, error) {
-	item, err := obj.RemoteItem.client.
-		Checksum(Args{Checksum: true, Force: true},
-			*obj.RemoteItem.RodsItem)
+	item, err := obj.client.Checksum(Args{Checksum: true, Force: true}, *obj.RodsItem)
 	if err != nil {
 		return "", err
 	}
@@ -204,8 +155,7 @@ func (obj *DataObject) CalculateChecksum() (string, error) {
 }
 
 func (obj *DataObject) FetchChecksum() (string, error) {
-	checksum, err := obj.RemoteItem.client.
-		ListChecksum(*obj.RemoteItem.RodsItem)
+	checksum, err := obj.client.ListChecksum(*obj.RodsItem)
 	if err != nil {
 		return "", err
 	}
@@ -255,8 +205,7 @@ func (obj *DataObject) Replicates() []Replicate {
 }
 
 func (obj *DataObject) FetchReplicates() ([]Replicate, error) {
-	item, err := obj.RemoteItem.client.
-		ListItem(Args{Replicate: true}, *obj.RemoteItem.RodsItem)
+	item, err := obj.client.ListItem(Args{Replicate: true}, *obj.RodsItem)
 	if err != nil {
 		return []Replicate{}, err
 	}
