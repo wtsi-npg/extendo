@@ -259,3 +259,90 @@ var _ = Describe("Ensure that a Collection exists", func() {
 	})
 
 })
+
+var _ = Describe("List a Collection contents", func() {
+	var (
+		client *ex.Client
+		err    error
+
+		rootColl string
+		workColl string
+
+		expected []string
+		getRodsPaths func(i []ex.RodsItem) []string
+	)
+
+	BeforeEach(func() {
+		client, err = ex.FindAndStart(batonArgs...)
+		Expect(err).NotTo(HaveOccurred())
+
+		rootColl = "/testZone/home/irods"
+		workColl = tmpRodsPath(rootColl, "ExtendoNewCollection")
+		getRodsPaths = func (i []ex.RodsItem) []string {
+			var paths []string
+			for _, p := range i {
+				r, _ := filepath.Rel(workColl, p.RodsPath())
+				paths = append(paths, r)
+			}
+			return paths
+		}
+
+		err = putTestData("testdata/", workColl)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	AfterEach(func() {
+		err = removeTestData(workColl)
+		Expect(err).NotTo(HaveOccurred())
+
+		client.StopIgnoreError()
+	})
+
+	When("a collection contents are not fetched", func() {
+		It("should be empty", func() {
+			coll := ex.NewCollection(client, filepath.Join(workColl, "testdata"))
+			Expect(coll.Contents()).To(BeEmpty())
+		})
+	})
+
+	When("a collection contents are fetched without recursion", func() {
+		It("should return the shallow contents", func() {
+			expected = []string{"testdata/1", "testdata/testdir"}
+
+			coll := ex.NewCollection(client, filepath.Join(workColl, "testdata"))
+			items, err := coll.FetchContents()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(items).To(WithTransform(getRodsPaths, ConsistOf(expected)))
+		})
+	})
+
+	When("a collection contents are fetched with recursion", func() {
+		It("should return the deep contents", func() {
+			expected = []string{
+				"testdata",
+				"testdata/1",
+				"testdata/1/reads",
+				"testdata/1/reads/fast5",
+				"testdata/1/reads/fastq",
+				"testdata/testdir",
+				"testdata/1/reads/fast5/reads1.fast5",
+				"testdata/1/reads/fast5/reads1.fast5.md5",
+				"testdata/1/reads/fast5/reads2.fast5",
+				"testdata/1/reads/fast5/reads3.fast5",
+				"testdata/1/reads/fastq/reads1.fastq",
+				"testdata/1/reads/fastq/reads1.fastq.md5",
+				"testdata/1/reads/fastq/reads2.fastq",
+				"testdata/1/reads/fastq/reads3.fastq",
+				"testdata/testdir/.gitignore",
+			}
+
+			coll := ex.NewCollection(client, filepath.Join(workColl, "testdata"))
+			items, err := coll.FetchContentsRecurse()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(items).To(WithTransform(getRodsPaths, ConsistOf(expected)))
+		})
+	})
+})
+
+
+

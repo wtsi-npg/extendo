@@ -189,3 +189,30 @@ func (coll *Collection) RemoveMetadata(avus []AVU) error {
 func (coll *Collection) ReplaceMetadata(avus []AVU) error {
 	return coll.RemoteItem.ReplaceMetadata(avus)
 }
+
+// Contents returns a shallow list of the collection contents. If the contents
+// have not been Fetched, the slice will be empty.
+func (coll *Collection) Contents() []RodsItem {
+	var items []RodsItem
+
+	for _, item := range coll.IContents {
+		if item.IsCollection() {
+			items = append(items, item)
+		}
+	}
+
+	return coll.IContents
+}
+
+// FetchContents returns a shallow list of the collection contents, freshly
+// fetched from the server. It caches the slice for future calls to Contents.
+func (coll *Collection) FetchContents() ([]RodsItem, error) {
+	return coll.RemoteItem.FetchContents()
+}
+
+// FetchContentsRecurse returns a recursive list of the collection contents,
+// freshly fetched from the server. It caches the slice for future calls to
+// Contents.
+func (coll *Collection) FetchContentsRecurse() ([]RodsItem, error) {
+	return coll.RemoteItem.FetchContentsRecurse()
+}

@@ -184,3 +184,30 @@ func (path RemoteItem) ReplaceMetadata(avus []AVU) error {
 
 	return err
 }
+
+// FetchContents returns a shallow list of the item contents, freshly
+// fetched from the server. It caches the slice for future calls to Contents.
+func (path RemoteItem) FetchContents() ([]RodsItem, error) {
+	item, err := path.client.ListItem(Args{Contents:true, Recurse: false}, *path.RodsItem)
+	if err != nil {
+		return []RodsItem{}, err
+	}
+
+	path.IContents = item.IContents
+
+	return path.IContents, err
+}
+
+// FetchContentsRecurse returns a recursive list of the item contents,
+// freshly fetched from the server. It caches the slice for future calls to
+// Contents.
+func (path RemoteItem) FetchContentsRecurse() ([]RodsItem, error) {
+	items, err := path.client.List(Args{Contents:true, Recurse: true}, *path.RodsItem)
+	if err != nil {
+		return []RodsItem{}, err
+	}
+	path.IContents = items
+
+	return path.IContents, err
+}
+
