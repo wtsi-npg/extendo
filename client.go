@@ -702,7 +702,7 @@ func (client *Client) execute(op string, args Args, item RodsItem) ([]RodsItem,
 		return nil, err
 	}
 
-	return unwrap(response)
+	return unwrap(client, response)
 }
 
 func (client *Client) send(envelope *Envelope) (*Envelope, error) {
@@ -748,7 +748,7 @@ func wrap(operation string, args Args, target RodsItem) *Envelope {
 	return &Envelope{Operation: operation, Arguments: args, Target: target}
 }
 
-func unwrap(envelope *Envelope) ([]RodsItem, error) {
+func unwrap(client *Client, envelope *Envelope) ([]RodsItem, error) {
 	var items RodsItemArr
 	if envelope.ErrorMsg != nil {
 		re := RodsError{errors.New(envelope.ErrorMsg.Message),
@@ -776,6 +776,8 @@ func unwrap(envelope *Envelope) ([]RodsItem, error) {
 	sort.Sort(items)
 
 	for _, item := range items {
+		item.client = client
+
 		var avus AVUArr = item.IAVUs
 		sort.Sort(avus)
 		item.IAVUs = avus
