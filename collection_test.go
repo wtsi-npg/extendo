@@ -269,6 +269,8 @@ var _ = Describe("List a Collection contents", func() {
 		workColl string
 
 		getRodsPaths func(i []ex.RodsItem) []string
+		getCollPaths func(i []ex.Collection) []string
+		getObjPaths func(i []ex.DataObject) []string
 	)
 
 	BeforeEach(func() {
@@ -277,14 +279,10 @@ var _ = Describe("List a Collection contents", func() {
 
 		rootColl = "/testZone/home/irods"
 		workColl = tmpRodsPath(rootColl, "ExtendoNewCollection")
-		getRodsPaths = func (i []ex.RodsItem) []string {
-			var paths []string
-			for _, p := range i {
-				r, _ := filepath.Rel(workColl, p.RodsPath())
-				paths = append(paths, r)
-			}
-			return paths
-		}
+
+		getRodsPaths = makeRodsItemTransform(workColl)
+		getCollPaths = makeCollTransform(workColl)
+		getObjPaths = makeObjTransform(workColl)
 
 		err = putTestData("testdata/", workColl)
 		Expect(err).NotTo(HaveOccurred())
@@ -306,21 +304,24 @@ var _ = Describe("List a Collection contents", func() {
 
 	When("a collection contents are fetched without recursion", func() {
 		It("should return the shallow contents", func() {
-			expected := []string{"testdata/1", "testdata/testdir"}
-
 			coll := ex.NewCollection(client, filepath.Join(workColl, "testdata"))
 			items, err := coll.FetchContents()
 			Expect(err).NotTo(HaveOccurred())
-			Expect(items).To(WithTransform(getRodsPaths, ConsistOf(expected)))
 
-			Expect(coll.Collections()).To(HaveLen(2))
+			expected := []string{"testdata/1", "testdata/testdir"}
+			Expect(items).To(WithTransform(getRodsPaths, ConsistOf(expected)))
+			Expect(coll.Collections()).To(WithTransform(getCollPaths, ConsistOf(expected)))
 			Expect(coll.DataObjects()).To(BeEmpty())
 		})
 	})
 
 	When("a collection contents are fetched with recursion", func() {
 		It("should return the deep contents", func() {
-			expected := []string{
+			coll := ex.NewCollection(client, filepath.Join(workColl, "testdata"))
+			items, err := coll.FetchContentsRecurse()
+			Expect(err).NotTo(HaveOccurred())
+
+			expectedItems := []string{
 				"testdata",
 				"testdata/1",
 				"testdata/1/reads",
@@ -337,14 +338,33 @@ var _ = Describe("List a Collection contents", func() {
 				"testdata/1/reads/fastq/reads3.fastq",
 				"testdata/testdir/.gitignore",
 			}
+			Expect(items).To(WithTransform(getRodsPaths,
+				ConsistOf(expectedItems)))
 
-			coll := ex.NewCollection(client, filepath.Join(workColl, "testdata"))
-			items, err := coll.FetchContentsRecurse()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(items).To(WithTransform(getRodsPaths, ConsistOf(expected)))
+			expectedColls := []string {
+				"testdata",
+				"testdata/1",
+				"testdata/1/reads",
+				"testdata/1/reads/fast5",
+				"testdata/1/reads/fastq",
+				"testdata/testdir",
+			}
+			Expect(coll.Collections()).To(WithTransform(getCollPaths,
+				ConsistOf(expectedColls)))
 
-			Expect(coll.Collections()).To(HaveLen(6))
-			Expect(coll.DataObjects()).To(HaveLen(9))
+			expectedObjs := []string{
+				"testdata/1/reads/fast5/reads1.fast5",
+				"testdata/1/reads/fast5/reads1.fast5.md5",
+				"testdata/1/reads/fast5/reads2.fast5",
+				"testdata/1/reads/fast5/reads3.fast5",
+				"testdata/1/reads/fastq/reads1.fastq",
+				"testdata/1/reads/fastq/reads1.fastq.md5",
+				"testdata/1/reads/fastq/reads2.fastq",
+				"testdata/1/reads/fastq/reads3.fastq",
+				"testdata/testdir/.gitignore",
+			}
+			Expect(coll.DataObjects()).To(WithTransform(getObjPaths,
+				ConsistOf(expectedObjs)))
 		})
 	})
 })

@@ -69,11 +69,11 @@ var DefaultResponseTimeout = 5 * time.Second
 // streams and its channels. If accessed from more than one goroutine,
 // instances must be externally synchronised.
 type Client struct {
-	path        string              // Path of the baton executable.
-	cmd         *exec.Cmd           // Cmd of the sub-process, once started.
-	stdin       io.WriteCloser      // stdin of the sub-process, once started.
-	stdout      io.ReadCloser       // stdout of the sub-process, once started.
-	stderr      io.ReadCloser       // stderr of the sub-process, once started.
+	path         string             // Path of the baton executable.
+	cmd          *exec.Cmd          // Cmd of the sub-process, once started.
+	stdin        io.WriteCloser     // stdin of the sub-process, once started.
+	stdout       io.ReadCloser      // stdout of the sub-process, once started.
+	stderr       io.ReadCloser      // stderr of the sub-process, once started.
 	in           chan []byte        // For sending to the sub-process.
 	out          chan []byte        // For receiving from the sub-process.
 	err          chan error         // For recording any sub-process error.
@@ -593,6 +593,7 @@ func (client *Client) listRecurse(args Args, item RodsItem) ([]RodsItem, error) 
 	var items RodsItemArr
 
 	if item.IsDataObject() {
+		item.client = client
 		return []RodsItem{item}, nil
 	}
 
@@ -615,6 +616,10 @@ func (client *Client) listRecurse(args Args, item RodsItem) ([]RodsItem, error) 
 		}
 	}
 	sort.Sort(items)
+
+	for i := range items {
+		items[i].client = client
+	}
 
 	return items, err
 }
@@ -655,6 +660,7 @@ func (client *Client) putRecurse(args Args, item RodsItem) ([]RodsItem, error) {
 		if !info.IsDir() {
 			dir := filepath.Dir(path)
 			obj := RodsItem{
+				client:     client,
 				IDirectory: dir,
 				IFile:      info.Name(),
 				IPath:      filepath.Clean(filepath.Join(rodsRoot, dir)),
@@ -775,20 +781,27 @@ func unwrap(client *Client, envelope *Envelope) ([]RodsItem, error) {
 
 	sort.Sort(items)
 
-	for _, item := range items {
-		item.client = client
+	for i := range items {
+		items[i].client = client
 
-		var avus AVUArr = item.IAVUs
+		var contents RodsItemArr = items[i].IContents
+		for j := range contents {
+			contents[j].client = client
+		}
+		sort.Sort(contents)
+		items[i].IContents = contents
+
+		var avus AVUArr = items[i].IAVUs
 		sort.Sort(avus)
-		item.IAVUs = avus
+		items[i].IAVUs = avus
 
-		var acls ACLArr = item.IACLs
+		var acls ACLArr = items[i].IACLs
 		sort.Sort(acls)
-		item.IACLs = acls
+		items[i].IACLs = acls
 
-		var timestamps TimestampArr = item.ITimestamps
+		var timestamps TimestampArr = items[i].ITimestamps
 		sort.Sort(timestamps)
-		item.ITimestamps = timestamps
+		items[i].ITimestamps = timestamps
 	}
 
 	return items, nil

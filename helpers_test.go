@@ -33,24 +33,48 @@ import (
 
 var batonArgs = []string{"--unbuffered"}
 
-var dirPaths = []string{
-	"testdata",
-	"testdata/1",
-	"testdata/1/reads",
-	"testdata/1/reads/fast5",
-	"testdata/1/reads/fastq",
-	"testdata/testdir"}
+func makeRodsItemTransform(workColl string) func(i []ex.RodsItem) []string {
+	return func (items []ex.RodsItem) []string {
+		var paths []string
+		for _, p := range items {
+			r, _ := filepath.Rel(workColl, p.RodsPath())
+			paths = append(paths, r)
+		}
+		return paths
+	}
+}
 
-var filePaths = []string{
-	"testdata/1/reads/fast5/reads1.fast5",
-	"testdata/1/reads/fast5/reads1.fast5.md5",
-	"testdata/1/reads/fast5/reads2.fast5",
-	"testdata/1/reads/fast5/reads3.fast5",
-	"testdata/1/reads/fastq/reads1.fastq",
-	"testdata/1/reads/fastq/reads1.fastq.md5",
-	"testdata/1/reads/fastq/reads2.fastq",
-	"testdata/1/reads/fastq/reads3.fastq",
-	"testdata/testdir/.gitignore",
+func makeCollTransform(workColl string) func (i []ex.Collection) []string {
+	return func (colls []ex.Collection) []string {
+		var paths []string
+		for _, p := range colls {
+			r, _ := filepath.Rel(workColl, p.RodsPath())
+			paths = append(paths, r)
+		}
+		return paths
+	}
+}
+
+func makeObjTransform(workColl string) func (i []ex.DataObject) []string {
+	return func (objs []ex.DataObject) []string {
+		var paths []string
+		for _, p := range objs {
+			r, _ := filepath.Rel(workColl, p.RodsPath())
+				paths = append(paths, r)
+		}
+		return paths
+	}
+}
+
+func makeLocalFileTransform(root string) func(i []ex.RodsItem) []string {
+	return func(items []ex.RodsItem) []string {
+		var paths []string
+		for _, p := range items {
+			r, _ := filepath.Rel(root, p.LocalPath())
+			paths = append(paths, r)
+		}
+		return paths
+	}
 }
 
 // Copy test data from local directory src into iRODS collection dst

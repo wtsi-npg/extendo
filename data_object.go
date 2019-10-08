@@ -36,7 +36,7 @@ func NewDataObject(client *Client, remotePath string) *DataObject {
 	path := filepath.Dir(remotePath)
 	name := filepath.Base(remotePath)
 
-	return &DataObject{&RodsItem{client:client, IPath: path, IName: name}}
+	return &DataObject{&RodsItem{client: client, IPath: path, IName: name}}
 }
 
 // PutDataObject make a new instance by sending a file local at localPath

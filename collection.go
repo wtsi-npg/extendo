@@ -146,9 +146,9 @@ func (coll *Collection) RemoveRecurse() error {
 func (coll *Collection) Collections() []Collection {
 	var colls []Collection
 
-	for _, item := range coll.Contents() {
-		if item.IsCollection() {
-			colls = append(colls, Collection{&item})
+	for i := range coll.IContents {
+		if coll.IContents[i].IsCollection() {
+			colls = append(colls, Collection{&coll.IContents[i]})
 		}
 	}
 
@@ -160,9 +160,9 @@ func (coll *Collection) Collections() []Collection {
 func (coll *Collection) DataObjects() []DataObject {
 	var objs []DataObject
 
-	for _, item := range coll.Contents() {
-		if item.IsDataObject() {
-			objs = append(objs, DataObject{&item})
+	for i := range coll.IContents {
+		if coll.IContents[i].IsDataObject() {
+			objs = append(objs, DataObject{&coll.IContents[i]})
 		}
 	}
 
@@ -172,14 +172,6 @@ func (coll *Collection) DataObjects() []DataObject {
 // Contents returns the collection contents. If the contents have not been
 // Fetched, the slice will be empty.
 func (coll *Collection) Contents() []RodsItem {
-	var items []RodsItem
-
-	for _, item := range coll.IContents {
-		if item.IsCollection() {
-			items = append(items, item)
-		}
-	}
-
 	return coll.IContents
 }
 
@@ -190,7 +182,6 @@ func (coll *Collection) FetchContents() ([]RodsItem, error) {
 	if err != nil {
 		return []RodsItem{}, err
 	}
-
 	coll.IContents = it.IContents
 
 	return coll.IContents, err

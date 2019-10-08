@@ -120,6 +120,8 @@ var _ = Describe("List an iRODS path", func() {
 		testColl     ex.RodsItem
 		testObj      ex.RodsItem
 		testChecksum = "1181c1834012245d785120e3505ed169"
+
+		getRodsPaths func(i []ex.RodsItem) []string
 	)
 
 	BeforeEach(func() {
@@ -128,6 +130,8 @@ var _ = Describe("List an iRODS path", func() {
 
 		rootColl = "/testZone/home/irods"
 		workColl = tmpRodsPath(rootColl, "ExtendoList")
+
+		getRodsPaths = makeRodsItemTransform(workColl)
 
 		err = putTestData("testdata/", workColl)
 		Expect(err).NotTo(HaveOccurred())
@@ -165,7 +169,7 @@ var _ = Describe("List an iRODS path", func() {
 				items, err := client.List(ex.Args{}, testColl)
 				Expect(err).NotTo(HaveOccurred())
 
-				Expect(len(items)).To(Equal(1))
+				Expect(items).To(HaveLen(1))
 				Expect(items[0].IPath).To(Equal(testColl.IPath))
 			})
 
@@ -173,13 +177,11 @@ var _ = Describe("List an iRODS path", func() {
 				It("should return contents", func() {
 					items, err := client.List(ex.Args{Contents: true}, testColl)
 					Expect(err).NotTo(HaveOccurred())
+					Expect(items).To(HaveLen(1))
 
-					Expect(len(items)).To(Equal(1))
+					expected := []string {"testdata/1", "testdata/testdir"}
 					contents := items[0].IContents
-					Expect(contents).To(Equal([]ex.RodsItem{
-						{IPath: filepath.Join(testColl.IPath, "1")},
-						{IPath: filepath.Join(testColl.IPath, "testdir")},
-					}))
+					Expect(contents).To(WithTransform(getRodsPaths, ConsistOf(expected)))
 				})
 			})
 
@@ -194,7 +196,7 @@ var _ = Describe("List an iRODS path", func() {
 					items, err := client.List(ex.Args{AVU: true}, testColl)
 					Expect(err).NotTo(HaveOccurred())
 
-					Expect(len(items)).To(Equal(1))
+					Expect(items).To(HaveLen(1))
 					metadata := items[0].IAVUs
 					Expect(metadata).To(Equal([]ex.AVU{{Attr: "test_attr_x", Value: "y"}}))
 				})
@@ -205,7 +207,7 @@ var _ = Describe("List an iRODS path", func() {
 					items, err := client.List(ex.Args{ACL: true}, testColl)
 					Expect(err).NotTo(HaveOccurred())
 
-					Expect(len(items)).To(Equal(1))
+					Expect(items).To(HaveLen(1))
 					acls := items[0].IACLs
 					Expect(acls).To(Equal([]ex.ACL{{Owner: "irods",
 						Level: "own", Zone: "testZone"}}))
@@ -217,23 +219,25 @@ var _ = Describe("List an iRODS path", func() {
 					items, err := client.List(ex.Args{Recurse: true}, testColl)
 					Expect(err).NotTo(HaveOccurred())
 
-					var expected []ex.RodsItem
-					for _, dirPath := range dirPaths {
-						expected = append(expected,
-							ex.RodsItem{
-								IPath: filepath.Join(workColl, dirPath)})
+					expectedItems := []string{
+						"testdata",
+						"testdata/1",
+						"testdata/1/reads",
+						"testdata/1/reads/fast5",
+						"testdata/1/reads/fastq",
+						"testdata/testdir",
+						"testdata/1/reads/fast5/reads1.fast5",
+						"testdata/1/reads/fast5/reads1.fast5.md5",
+						"testdata/1/reads/fast5/reads2.fast5",
+						"testdata/1/reads/fast5/reads3.fast5",
+						"testdata/1/reads/fastq/reads1.fastq",
+						"testdata/1/reads/fastq/reads1.fastq.md5",
+						"testdata/1/reads/fastq/reads2.fastq",
+						"testdata/1/reads/fastq/reads3.fastq",
+						"testdata/testdir/.gitignore",
 					}
 
-					for _, filePath := range filePaths {
-						objPath := filepath.Join(workColl, filePath)
-						expected = append(expected,
-							ex.RodsItem{
-								IPath: filepath.Dir(objPath),
-								IName: filepath.Base(objPath)},
-						)
-					}
-
-					Expect(items).To(Equal(expected))
+					Expect(items).To(WithTransform(getRodsPaths, ConsistOf(expectedItems)))
 				})
 			})
 		})
@@ -260,22 +264,23 @@ var _ = Describe("List an iRODS path", func() {
 	When("the item is a data object", func() {
 		BeforeEach(func() {
 			testObj = ex.RodsItem{
-				IPath: filepath.Join(workColl, "testdata/1/reads/fast5"),
-				IName: "reads1.fast5"}
+				IPath:  filepath.Join(workColl, "testdata/1/reads/fast5"),
+				IName:  "reads1.fast5"}
 		})
 
 		Context("multiple items are requested", func() {
 			It("should return a RodsItem with that path and name", func() {
 				items, err := client.List(ex.Args{}, testObj)
 				Expect(err).NotTo(HaveOccurred())
-				Expect(items[0]).To(Equal(testObj))
+				Expect(items[0].IName).To(Equal(testObj.IName))
+				Expect(items[0].IPath).To(Equal(testObj.IPath))
 			})
 
 			It("should have a checksum if requested", func() {
 				items, err := client.List(ex.Args{Checksum: true}, testObj)
 				Expect(err).NotTo(HaveOccurred())
 
-				Expect(len(items)).To(Equal(1))
+				Expect(items).To(HaveLen(1))
 				Expect(items[0].IChecksum).To(Equal(testChecksum))
 			})
 
@@ -284,7 +289,7 @@ var _ = Describe("List an iRODS path", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				var expected uint64 = 4
-				Expect(len(items)).To(Equal(1))
+				Expect(items).To(HaveLen(1))
 				Expect(items[0].ISize).To(Equal(expected))
 			})
 
@@ -292,9 +297,9 @@ var _ = Describe("List an iRODS path", func() {
 				items, err := client.List(ex.Args{Replicate: true}, testObj)
 				Expect(err).NotTo(HaveOccurred())
 
-				Expect(len(items)).To(Equal(1))
+				Expect(items).To(HaveLen(1))
 				reps := items[0].IReplicates
-				Expect(len(reps)).To(Equal(1))
+				Expect(reps).To(HaveLen(1))
 
 				Expect(reps[0]).To(Equal(ex.Replicate{
 					Resource: "demoResc",
@@ -307,9 +312,9 @@ var _ = Describe("List an iRODS path", func() {
 				items, err := client.List(ex.Args{Timestamp: true}, testObj)
 				Expect(err).NotTo(HaveOccurred())
 
-				Expect(len(items)).To(Equal(1))
+				Expect(items).To(HaveLen(1))
 				stamps := items[0].ITimestamps
-				Expect(len(stamps)).To(Equal(2))
+				Expect(stamps).To(HaveLen(2))
 
 				Expect(stamps[0].Created).
 					To(BeTemporally("~", time.Now(), time.Minute))
@@ -331,7 +336,7 @@ var _ = Describe("List an iRODS path", func() {
 					items, err := client.List(ex.Args{AVU: true}, testObj)
 					Expect(err).NotTo(HaveOccurred())
 
-					Expect(len(items)).To(Equal(1))
+					Expect(items).To(HaveLen(1))
 					metadata := items[0].IAVUs
 
 					Expect(metadata).To(Equal([]ex.AVU{
@@ -345,7 +350,7 @@ var _ = Describe("List an iRODS path", func() {
 				items, err := client.List(ex.Args{ACL: true}, testObj)
 				Expect(err).NotTo(HaveOccurred())
 
-				Expect(len(items)).To(Equal(1))
+				Expect(items).To(HaveLen(1))
 				acls := items[0].IACLs
 				Expect(acls).To(Equal([]ex.ACL{{Owner: "irods",
 					Level: "own", Zone: "testZone"}}))
@@ -356,7 +361,8 @@ var _ = Describe("List an iRODS path", func() {
 			It("should return a RodsItem with that path and name", func() {
 				item, err := client.ListItem(ex.Args{}, testObj)
 				Expect(err).NotTo(HaveOccurred())
-				Expect(item).To(Equal(testObj))
+				Expect(item.IName).To(Equal(testObj.IName))
+				Expect(item.IPath).To(Equal(testObj.IPath))
 			})
 		})
 	})
@@ -420,7 +426,7 @@ var _ = Describe("Put a file into iRODS", func() {
 		It("should not have a checksum by default", func() {
 			items, err := client.Put(ex.Args{}, testObj)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(len(items)).To(Equal(1))
+			Expect(items).To(HaveLen(1))
 
 			checksum, err := client.ListChecksum(items[0])
 			Expect(err).NotTo(HaveOccurred())
@@ -456,6 +462,9 @@ var _ = Describe("Put a directory into iRODS", func() {
 
 		rootColl string
 		workColl string
+
+		getRodsPaths func(i []ex.RodsItem) []string
+		getLocalPaths func(i []ex.RodsItem) []string
 	)
 
 	BeforeEach(func() {
@@ -464,6 +473,9 @@ var _ = Describe("Put a directory into iRODS", func() {
 
 		rootColl = "/testZone/home/irods"
 		workColl = tmpRodsPath(rootColl, "ExtendoPut")
+
+		getRodsPaths = makeRodsItemTransform(workColl)
+		getLocalPaths = makeLocalFileTransform("testdata")
 	})
 
 	When("a local directory is put into iRODS, without recursion", func() {
@@ -507,20 +519,33 @@ var _ = Describe("Put a directory into iRODS", func() {
 			items, err := client.Put(ex.Args{Recurse: true}, testItem)
 			Expect(err).NotTo(HaveOccurred())
 
-			var expected []ex.RodsItem
-			for _, filePath := range filePaths {
-				objPath := filepath.Join(workColl, filePath)
-				expected = append(expected,
-					ex.RodsItem{
-						IDirectory: filepath.Dir(filePath),
-						IFile:      filepath.Base(filePath),
-						IPath:      filepath.Dir(objPath),
-						IName:      filepath.Base(objPath),
-					},
-				)
+			expectedItems := []string {
+				"testdata/1/reads/fast5/reads1.fast5",
+				"testdata/1/reads/fast5/reads1.fast5.md5",
+				"testdata/1/reads/fast5/reads2.fast5",
+				"testdata/1/reads/fast5/reads3.fast5",
+				"testdata/1/reads/fastq/reads1.fastq",
+				"testdata/1/reads/fastq/reads1.fastq.md5",
+				"testdata/1/reads/fastq/reads2.fastq",
+				"testdata/1/reads/fastq/reads3.fastq",
+				"testdata/testdir/.gitignore",
 			}
+			Expect(items).To(WithTransform(getRodsPaths,
+				ConsistOf(expectedItems)))
 
-			Expect(items).To(Equal(expected))
+			expectedFiles := []string {
+				"1/reads/fast5/reads1.fast5",
+				"1/reads/fast5/reads1.fast5.md5",
+				"1/reads/fast5/reads2.fast5",
+				"1/reads/fast5/reads3.fast5",
+				"1/reads/fastq/reads1.fastq",
+				"1/reads/fastq/reads1.fastq.md5",
+				"1/reads/fastq/reads2.fastq",
+				"1/reads/fastq/reads3.fastq",
+				"testdir/.gitignore",
+			}
+			Expect(items).To(WithTransform(getLocalPaths,
+				ConsistOf(expectedFiles)))
 		})
 	})
 })
@@ -916,6 +941,8 @@ var _ = Describe("Metadata query", func() {
 
 		rootColl string
 		workColl string
+
+		getRodsPaths func(i []ex.RodsItem) []string
 	)
 
 	BeforeEach(func() {
@@ -924,6 +951,7 @@ var _ = Describe("Metadata query", func() {
 
 		rootColl = "/testZone/home/irods"
 		workColl = tmpRodsPath(rootColl, "ExtendoMeta")
+		getRodsPaths = makeRodsItemTransform(workColl)
 
 		err = putTestData("testdata/", workColl)
 		Expect(err).NotTo(HaveOccurred())
@@ -963,9 +991,8 @@ var _ = Describe("Metadata query", func() {
 					ex.RodsItem{IAVUs: []ex.AVU{{Attr: "test_attr_x", Value: "y"}}})
 				Expect(err).NotTo(HaveOccurred())
 
-				expected :=
-					[]ex.RodsItem{{IPath: filepath.Join(workColl, "testdata")}}
-				Expect(items).To(Equal(expected))
+				Expect(items).To(HaveLen(1))
+				Expect(items[0].IPath).To(Equal(filepath.Join(workColl, "testdata")))
 				Expect(items[0].IsCollection()).To(BeTrue())
 			})
 		})
@@ -991,20 +1018,20 @@ var _ = Describe("Metadata query", func() {
 					ex.RodsItem{IAVUs: []ex.AVU{{Attr: "test_attr_a", Value: "1"}}})
 				Expect(err).NotTo(HaveOccurred())
 
-				var expected []ex.RodsItem
-				for _, filePath := range filePaths {
-					objPath := filepath.Join(workColl, filePath)
-					expected = append(expected,
-						ex.RodsItem{
-							IPath: filepath.Dir(objPath),
-							IName: filepath.Base(objPath)},
-					)
+				expectedItems := []string {
+					"testdata/1/reads/fast5/reads1.fast5",
+					"testdata/1/reads/fast5/reads1.fast5.md5",
+					"testdata/1/reads/fast5/reads2.fast5",
+					"testdata/1/reads/fast5/reads3.fast5",
+					"testdata/1/reads/fastq/reads1.fastq",
+					"testdata/1/reads/fastq/reads1.fastq.md5",
+					"testdata/1/reads/fastq/reads2.fastq",
+					"testdata/1/reads/fastq/reads3.fastq",
+					"testdata/testdir/.gitignore",
 				}
 
-				Expect(items).To(Equal(expected))
-				for _, item := range items {
-					Expect(item.IsDataObject()).To(BeTrue())
-				}
+				Expect(items).To(WithTransform(getRodsPaths,
+					ConsistOf(expectedItems)))
 			})
 		})
 	})
