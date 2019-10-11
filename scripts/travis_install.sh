@@ -13,13 +13,9 @@ echo "conda activate base" >> ~/.bashrc
 conda activate base
 conda config --set auto_update_conda False
 conda config --add channels https://dnap.cog.sanger.ac.uk/npg/conda/devel/generic
-conda config --add channels https://dnap.cog.sanger.ac.uk/npg/conda/experimental/generic
 conda create -y -n travis
 conda activate travis
 conda install -y irods-icommands
-
-conda info
-conda search baton
 conda install -y baton=2.0.0
 
 mkdir -p ~/.irods
