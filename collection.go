@@ -50,9 +50,11 @@ func MakeCollection(client *Client, remotePath string) (*Collection, error) {
 	coll := &Collection{&item}
 
 	// iRODS should not return from MakeCollection until the collection is
-	// made. However, I have observed that the iRODS 4.1.12 server will do so,
-	// leading to the failure of any operations the client performs on the
-	// returned collection.
+	// made. However, I have observed that the iRODS 4.1.12 and 4.2.6 server
+	// will do so, leading to the failure of any operations the client performs
+	// on the returned collection.
+	//
+	// https://github.com/irods/irods/issues/4547
 	//
 	// This retry is a workaround to block and wait for the collection to
 	// appear. It's quite ugly, but simple and fixes
@@ -60,7 +62,7 @@ func MakeCollection(client *Client, remotePath string) (*Collection, error) {
 	log := logs.GetLogger()
 
 	var exists bool
-	maxTries, backoffFactor := 3, 2
+	maxTries, backoffFactor := 10, 2
 
 	for try := 0; try < maxTries; try++ {
 		exists, err = coll.Exists()

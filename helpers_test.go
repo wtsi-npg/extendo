@@ -31,10 +31,15 @@ import (
 	ex "github.com/kjsanger/extendo"
 )
 
+type itemPathTransform func(i []ex.RodsItem) []string
+type collPathTransform func(i []ex.Collection) []string
+type objPathTransform func(i []ex.DataObject) []string
+type localPathTransform func(i []ex.RodsItem) []string
+
 var batonArgs = []string{"--unbuffered"}
 
 func makeRodsItemTransform(workColl string) func(i []ex.RodsItem) []string {
-	return func (items []ex.RodsItem) []string {
+	return func(items []ex.RodsItem) []string {
 		var paths []string
 		for _, p := range items {
 			r, _ := filepath.Rel(workColl, p.RodsPath())
@@ -44,8 +49,8 @@ func makeRodsItemTransform(workColl string) func(i []ex.RodsItem) []string {
 	}
 }
 
-func makeCollTransform(workColl string) func (i []ex.Collection) []string {
-	return func (colls []ex.Collection) []string {
+func makeCollTransform(workColl string) func(i []ex.Collection) []string {
+	return func(colls []ex.Collection) []string {
 		var paths []string
 		for _, p := range colls {
 			r, _ := filepath.Rel(workColl, p.RodsPath())
@@ -55,12 +60,12 @@ func makeCollTransform(workColl string) func (i []ex.Collection) []string {
 	}
 }
 
-func makeObjTransform(workColl string) func (i []ex.DataObject) []string {
-	return func (objs []ex.DataObject) []string {
+func makeObjTransform(workColl string) func(i []ex.DataObject) []string {
+	return func(objs []ex.DataObject) []string {
 		var paths []string
 		for _, p := range objs {
 			r, _ := filepath.Rel(workColl, p.RodsPath())
-				paths = append(paths, r)
+			paths = append(paths, r)
 		}
 		return paths
 	}
@@ -102,7 +107,7 @@ func putTestData(src string, dst string) error {
 }
 
 // Remove test data recursively from under path dst from iRODS
-func removeTestData(dst string) error {
+func removeTmpCollection(dst string) error {
 	client, err := ex.FindAndStart("--unbuffered")
 	if err != nil {
 		return err

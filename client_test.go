@@ -114,14 +114,12 @@ var _ = Describe("List an iRODS path", func() {
 		client *ex.Client
 		err    error
 
-		rootColl string
-		workColl string
+		rootColl, workColl string
+		testColl, testObj  ex.RodsItem
 
-		testColl     ex.RodsItem
-		testObj      ex.RodsItem
 		testChecksum = "1181c1834012245d785120e3505ed169"
 
-		getRodsPaths func(i []ex.RodsItem) []string
+		getRodsPaths itemPathTransform
 	)
 
 	BeforeEach(func() {
@@ -138,7 +136,7 @@ var _ = Describe("List an iRODS path", func() {
 	})
 
 	AfterEach(func() {
-		err = removeTestData(workColl)
+		err = removeTmpCollection(workColl)
 		Expect(err).NotTo(HaveOccurred())
 
 		client.StopIgnoreError()
@@ -179,7 +177,7 @@ var _ = Describe("List an iRODS path", func() {
 					Expect(err).NotTo(HaveOccurred())
 					Expect(items).To(HaveLen(1))
 
-					expected := []string {"testdata/1", "testdata/testdir"}
+					expected := []string{"testdata/1", "testdata/testdir"}
 					contents := items[0].IContents
 					Expect(contents).To(WithTransform(getRodsPaths, ConsistOf(expected)))
 				})
@@ -264,8 +262,8 @@ var _ = Describe("List an iRODS path", func() {
 	When("the item is a data object", func() {
 		BeforeEach(func() {
 			testObj = ex.RodsItem{
-				IPath:  filepath.Join(workColl, "testdata/1/reads/fast5"),
-				IName:  "reads1.fast5"}
+				IPath: filepath.Join(workColl, "testdata/1/reads/fast5"),
+				IName: "reads1.fast5"}
 		})
 
 		Context("multiple items are requested", func() {
@@ -373,12 +371,10 @@ var _ = Describe("Put a file into iRODS", func() {
 		client *ex.Client
 		err    error
 
-		rootColl string
-		workColl string
+		rootColl, workColl      string
+		existingObject, testObj ex.RodsItem
 
-		existingObject ex.RodsItem
-		testObj        ex.RodsItem
-		testChecksum   = "1181c1834012245d785120e3505ed169"
+		testChecksum = "1181c1834012245d785120e3505ed169"
 	)
 
 	BeforeEach(func() {
@@ -405,7 +401,7 @@ var _ = Describe("Put a file into iRODS", func() {
 	})
 
 	AfterEach(func() {
-		err = removeTestData(workColl)
+		err = removeTmpCollection(workColl)
 		Expect(err).NotTo(HaveOccurred())
 
 		client.StopIgnoreError()
@@ -460,11 +456,10 @@ var _ = Describe("Put a directory into iRODS", func() {
 		client *ex.Client
 		err    error
 
-		rootColl string
-		workColl string
+		rootColl, workColl string
 
-		getRodsPaths func(i []ex.RodsItem) []string
-		getLocalPaths func(i []ex.RodsItem) []string
+		getRodsPaths  itemPathTransform
+		getLocalPaths localPathTransform
 	)
 
 	BeforeEach(func() {
@@ -503,7 +498,7 @@ var _ = Describe("Put a directory into iRODS", func() {
 
 	When("a local directory is put into iRODS, with recursion", func() {
 		AfterEach(func() {
-			err = removeTestData(workColl)
+			err = removeTmpCollection(workColl)
 			Expect(err).NotTo(HaveOccurred())
 
 			client.StopIgnoreError()
@@ -519,7 +514,7 @@ var _ = Describe("Put a directory into iRODS", func() {
 			items, err := client.Put(ex.Args{Recurse: true}, testItem)
 			Expect(err).NotTo(HaveOccurred())
 
-			expectedItems := []string {
+			expectedItems := []string{
 				"testdata/1/reads/fast5/reads1.fast5",
 				"testdata/1/reads/fast5/reads1.fast5.md5",
 				"testdata/1/reads/fast5/reads2.fast5",
@@ -533,7 +528,7 @@ var _ = Describe("Put a directory into iRODS", func() {
 			Expect(items).To(WithTransform(getRodsPaths,
 				ConsistOf(expectedItems)))
 
-			expectedFiles := []string {
+			expectedFiles := []string{
 				"1/reads/fast5/reads1.fast5",
 				"1/reads/fast5/reads1.fast5.md5",
 				"1/reads/fast5/reads2.fast5",
@@ -555,8 +550,7 @@ var _ = Describe("Remove a data object from iRODS", func() {
 		client *ex.Client
 		err    error
 
-		rootColl string
-		workColl string
+		rootColl, workColl string
 
 		testObj      ex.RodsItem
 		testChecksum = "1181c1834012245d785120e3505ed169"
@@ -574,7 +568,7 @@ var _ = Describe("Remove a data object from iRODS", func() {
 	})
 
 	AfterEach(func() {
-		err = removeTestData(workColl)
+		err = removeTmpCollection(workColl)
 		Expect(err).NotTo(HaveOccurred())
 
 		client.StopIgnoreError()
@@ -612,8 +606,7 @@ var _ = Describe("Remove an iRODS collection", func() {
 		client *ex.Client
 		err    error
 
-		rootColl string
-		workColl string
+		rootColl, workColl string
 
 		testColl ex.RodsItem
 	)
@@ -630,7 +623,7 @@ var _ = Describe("Remove an iRODS collection", func() {
 	})
 
 	AfterEach(func() {
-		err = removeTestData(workColl)
+		err = removeTmpCollection(workColl)
 		Expect(err).NotTo(HaveOccurred())
 
 		client.StopIgnoreError()
@@ -717,8 +710,7 @@ var _ = Describe("Calculate a data object checksum", func() {
 		client *ex.Client
 		err    error
 
-		rootColl string
-		workColl string
+		rootColl, workColl string
 
 		testObj      ex.RodsItem
 		testChecksum = "1181c1834012245d785120e3505ed169"
@@ -743,7 +735,7 @@ var _ = Describe("Calculate a data object checksum", func() {
 	})
 
 	AfterEach(func() {
-		err = removeTestData(workColl)
+		err = removeTmpCollection(workColl)
 		Expect(err).NotTo(HaveOccurred())
 
 		client.StopIgnoreError()
@@ -773,11 +765,8 @@ var _ = Describe("Add access permissions", func() {
 		client *ex.Client
 		err    error
 
-		rootColl string
-		workColl string
-
-		testColl ex.RodsItem
-		testObj  ex.RodsItem
+		rootColl, workColl string
+		testColl, testObj  ex.RodsItem
 
 		publicRead = ex.ACL{Owner: "public", Level: "read", Zone: "testZone"}
 	)
@@ -800,7 +789,7 @@ var _ = Describe("Add access permissions", func() {
 	})
 
 	AfterEach(func() {
-		err = removeTestData(workColl)
+		err = removeTmpCollection(workColl)
 		Expect(err).NotTo(HaveOccurred())
 
 		client.StopIgnoreError()
@@ -852,11 +841,8 @@ var _ = Describe("Remove access permissions", func() {
 		client *ex.Client
 		err    error
 
-		rootColl string
-		workColl string
-
-		testColl ex.RodsItem
-		testObj  ex.RodsItem
+		rootColl, workColl string
+		testColl, testObj  ex.RodsItem
 
 		publicRead = ex.ACL{Owner: "public", Level: "read", Zone: "testZone"}
 		publicNull = ex.ACL{Owner: "public", Level: "null", Zone: "testZone"}
@@ -887,7 +873,7 @@ var _ = Describe("Remove access permissions", func() {
 	})
 
 	AfterEach(func() {
-		err = removeTestData(workColl)
+		err = removeTmpCollection(workColl)
 		Expect(err).NotTo(HaveOccurred())
 
 		client.StopIgnoreError()
@@ -939,10 +925,9 @@ var _ = Describe("Metadata query", func() {
 		client *ex.Client
 		err    error
 
-		rootColl string
-		workColl string
+		rootColl, workColl string
 
-		getRodsPaths func(i []ex.RodsItem) []string
+		getRodsPaths itemPathTransform
 	)
 
 	BeforeEach(func() {
@@ -958,7 +943,7 @@ var _ = Describe("Metadata query", func() {
 	})
 
 	AfterEach(func() {
-		err = removeTestData(workColl)
+		err = removeTmpCollection(workColl)
 		Expect(err).NotTo(HaveOccurred())
 
 		client.StopIgnoreError()
@@ -1018,7 +1003,7 @@ var _ = Describe("Metadata query", func() {
 					ex.RodsItem{IAVUs: []ex.AVU{{Attr: "test_attr_a", Value: "1"}}})
 				Expect(err).NotTo(HaveOccurred())
 
-				expectedItems := []string {
+				expectedItems := []string{
 					"testdata/1/reads/fast5/reads1.fast5",
 					"testdata/1/reads/fast5/reads1.fast5.md5",
 					"testdata/1/reads/fast5/reads2.fast5",
@@ -1042,11 +1027,8 @@ var _ = Describe("Add metadata", func() {
 		client *ex.Client
 		err    error
 
-		rootColl string
-		workColl string
-
-		testColl ex.RodsItem
-		testObj  ex.RodsItem
+		rootColl, workColl string
+		testColl, testObj  ex.RodsItem
 
 		newAVU = ex.AVU{Attr: "abcdefgh", Value: "1234567890"}
 	)
@@ -1069,7 +1051,7 @@ var _ = Describe("Add metadata", func() {
 	})
 
 	AfterEach(func() {
-		err = removeTestData(workColl)
+		err = removeTmpCollection(workColl)
 		Expect(err).NotTo(HaveOccurred())
 
 		client.StopIgnoreError()

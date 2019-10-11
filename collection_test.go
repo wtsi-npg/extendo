@@ -34,8 +34,7 @@ var _ = Describe("Make an existing Collection instance from iRODS", func() {
 		client *ex.Client
 		err    error
 
-		rootColl string
-		workColl string
+		rootColl, workColl string
 	)
 
 	BeforeEach(func() {
@@ -50,7 +49,7 @@ var _ = Describe("Make an existing Collection instance from iRODS", func() {
 	})
 
 	AfterEach(func() {
-		err = removeTestData(workColl)
+		err = removeTmpCollection(workColl)
 		Expect(err).NotTo(HaveOccurred())
 
 		client.StopIgnoreError()
@@ -81,8 +80,7 @@ var _ = Describe("Report that a Collection exists", func() {
 		client *ex.Client
 		err    error
 
-		rootColl string
-		workColl string
+		rootColl, workColl string
 
 		coll *ex.Collection
 	)
@@ -99,7 +97,7 @@ var _ = Describe("Report that a Collection exists", func() {
 	})
 
 	AfterEach(func() {
-		err = removeTestData(workColl)
+		err = removeTmpCollection(workColl)
 		Expect(err).NotTo(HaveOccurred())
 
 		client.StopIgnoreError()
@@ -132,8 +130,7 @@ var _ = Describe("Make a new Collection in iRODS", func() {
 		client *ex.Client
 		err    error
 
-		rootColl string
-		workColl string
+		rootColl, workColl string
 	)
 
 	BeforeEach(func() {
@@ -145,7 +142,7 @@ var _ = Describe("Make a new Collection in iRODS", func() {
 	})
 
 	AfterEach(func() {
-		err = removeTestData(workColl)
+		err = removeTmpCollection(workColl)
 		Expect(err).NotTo(HaveOccurred())
 
 		client.StopIgnoreError()
@@ -181,8 +178,7 @@ var _ = Describe("Put a Collection into iRODS", func() {
 		client *ex.Client
 		err    error
 
-		rootColl string
-		workColl string
+		rootColl, workColl string
 	)
 
 	BeforeEach(func() {
@@ -194,7 +190,7 @@ var _ = Describe("Put a Collection into iRODS", func() {
 	})
 
 	AfterEach(func() {
-		err = removeTestData(workColl)
+		err = removeTmpCollection(workColl)
 		Expect(err).NotTo(HaveOccurred())
 
 		client.StopIgnoreError()
@@ -217,8 +213,7 @@ var _ = Describe("Ensure that a Collection exists", func() {
 		client *ex.Client
 		err    error
 
-		rootColl string
-		workColl string
+		rootColl, workColl string
 	)
 
 	BeforeEach(func() {
@@ -230,7 +225,7 @@ var _ = Describe("Ensure that a Collection exists", func() {
 	})
 
 	AfterEach(func() {
-		err = removeTestData(workColl)
+		err = removeTmpCollection(workColl)
 		Expect(err).NotTo(HaveOccurred())
 
 		client.StopIgnoreError()
@@ -265,12 +260,11 @@ var _ = Describe("List a Collection contents", func() {
 		client *ex.Client
 		err    error
 
-		rootColl string
-		workColl string
+		rootColl, workColl string
 
-		getRodsPaths func(i []ex.RodsItem) []string
-		getCollPaths func(i []ex.Collection) []string
-		getObjPaths func(i []ex.DataObject) []string
+		getRodsPaths itemPathTransform
+		getCollPaths collPathTransform
+		getObjPaths  objPathTransform
 	)
 
 	BeforeEach(func() {
@@ -289,7 +283,7 @@ var _ = Describe("List a Collection contents", func() {
 	})
 
 	AfterEach(func() {
-		err = removeTestData(workColl)
+		err = removeTmpCollection(workColl)
 		Expect(err).NotTo(HaveOccurred())
 
 		client.StopIgnoreError()
@@ -341,7 +335,7 @@ var _ = Describe("List a Collection contents", func() {
 			Expect(items).To(WithTransform(getRodsPaths,
 				ConsistOf(expectedItems)))
 
-			expectedColls := []string {
+			expectedColls := []string{
 				"testdata",
 				"testdata/1",
 				"testdata/1/reads",
@@ -368,6 +362,3 @@ var _ = Describe("List a Collection contents", func() {
 		})
 	})
 })
-
-
-

@@ -34,8 +34,7 @@ var _ = Describe("Make an existing DataObject instance from iRODS", func() {
 		client *ex.Client
 		err    error
 
-		rootColl string
-		workColl string
+		rootColl, workColl string
 	)
 
 	BeforeEach(func() {
@@ -50,7 +49,7 @@ var _ = Describe("Make an existing DataObject instance from iRODS", func() {
 	})
 
 	AfterEach(func() {
-		err = removeTestData(workColl)
+		err = removeTmpCollection(workColl)
 		Expect(err).NotTo(HaveOccurred())
 
 		client.StopIgnoreError()
@@ -65,7 +64,6 @@ var _ = Describe("Make an existing DataObject instance from iRODS", func() {
 			Expect(obj.LocalPath()).To(Equal(""))
 		})
 	})
-
 
 	When("a data object exists in iRODS", func() {
 		It("should be possible to make a DataObject instance", func() {
@@ -83,8 +81,7 @@ var _ = Describe("Report that a DataObject exists", func() {
 		client *ex.Client
 		err    error
 
-		rootColl string
-		workColl string
+		rootColl, workColl string
 
 		obj *ex.DataObject
 	)
@@ -101,7 +98,7 @@ var _ = Describe("Report that a DataObject exists", func() {
 	})
 
 	AfterEach(func() {
-		err = removeTestData(workColl)
+		err = removeTmpCollection(workColl)
 		Expect(err).NotTo(HaveOccurred())
 
 		client.StopIgnoreError()
@@ -134,8 +131,7 @@ var _ = Describe("Put a DataObject into iRODS", func() {
 		client *ex.Client
 		err    error
 
-		rootColl string
-		workColl string
+		rootColl, workColl string
 	)
 
 	BeforeEach(func() {
@@ -150,7 +146,7 @@ var _ = Describe("Put a DataObject into iRODS", func() {
 	})
 
 	AfterEach(func() {
-		err = removeTestData(workColl)
+		err = removeTmpCollection(workColl)
 		Expect(err).NotTo(HaveOccurred())
 
 		client.StopIgnoreError()
@@ -175,15 +171,11 @@ var _ = Describe("Archive a DataObject into iRODS", func() {
 		client *ex.Client
 		err    error
 
-		rootColl string
-		workColl string
+		rootColl, workColl                  string
+		localPath, remotePath, newLocalPath string
 
-		localPath  string
-		remotePath string
-		checksum   = "1181c1834012245d785120e3505ed169"
-
-		newLocalPath string
-		newChecksum  = "348bd3ce10ec00ecc29d31ec97cd5839"
+		checksum    = "1181c1834012245d785120e3505ed169"
+		newChecksum = "348bd3ce10ec00ecc29d31ec97cd5839"
 	)
 
 	BeforeEach(func() {
@@ -203,7 +195,7 @@ var _ = Describe("Archive a DataObject into iRODS", func() {
 	})
 
 	AfterEach(func() {
-		err = removeTestData(workColl)
+		err = removeTmpCollection(workColl)
 		Expect(err).NotTo(HaveOccurred())
 
 		client.StopIgnoreError()
@@ -305,11 +297,10 @@ var _ = Describe("Replace metadata on a DataObject", func() {
 		client *ex.Client
 		err    error
 
-		rootColl string
-		workColl string
+		rootColl, workColl string
+		remotePath         string
 
-		remotePath string
-		obj        *ex.DataObject
+		obj *ex.DataObject
 
 		avuA0, avuA1, avuA2, avuB0, avuB1 ex.AVU
 	)
@@ -328,7 +319,7 @@ var _ = Describe("Replace metadata on a DataObject", func() {
 	})
 
 	AfterEach(func() {
-		err = removeTestData(workColl)
+		err = removeTmpCollection(workColl)
 		Expect(err).NotTo(HaveOccurred())
 
 		client.StopIgnoreError()
