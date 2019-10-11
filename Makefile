@@ -17,8 +17,10 @@ lint:
 check: test
 
 test:
-	go test -coverprofile=coverage.out -race -v ./...
-#	go tool cover -func=coverage.out
+	ginkgo -r -slowSpecThreshold=30 -race
+
+coverage:
+	ginkgo -r -slowSpecThreshold=30 -cover -coverprofile=coverage.out
 
 clean:
 	go clean
