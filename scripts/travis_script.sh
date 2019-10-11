@@ -9,4 +9,7 @@ echo "irods" | script -q -c "iinit" /dev/null
 ienv
 ils
 
-go test -v ./...
+which baton-do
+baton-do --version
+
+make test
