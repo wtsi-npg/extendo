@@ -30,7 +30,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
 	"syscall"
@@ -428,6 +427,7 @@ func (client *Client) ClientPid() int {
 	return -1
 }
 
+// IsRunning returns true if the client's baton sub-process is running.
 func (client *Client) IsRunning() bool {
 	return client.running
 }
@@ -456,6 +456,8 @@ func (client *Client) Checksum(args Args, item RodsItem) (RodsItem, error) {
 	return items[0], err
 }
 
+// Get fetches a data object from iRODS. Fetching collections recursively is
+// not supported.
 func (client *Client) Get(args Args, item RodsItem) (RodsItem, error) {
 	items, err := client.execute(GET, args, item)
 	if err != nil {
@@ -465,9 +467,9 @@ func (client *Client) Get(args Args, item RodsItem) (RodsItem, error) {
 }
 
 // List retrieves information about collections and/or data objects in iRODS.
-// The items returned are sorted as a RodsItemArr (collections first, then by
-// path and finally by name). The detailed composition of the items is
-// influenced by the supplied Args:
+// The items returned are sorted (collections first, then by path and finally
+// by name). The detailed composition of the items is influenced by the
+// supplied Args:
 //
 // Args.ACL = true        Include ACLs
 // Args.AVU = true        Include AVUs
@@ -511,6 +513,8 @@ func (client *Client) ListItem(args Args, item RodsItem) (RodsItem, error) {
 	}
 }
 
+// ListChecksum returns the iRODS checksum of an item, which must be a data
+// object.
 func (client *Client) ListChecksum(item RodsItem) (string, error) {
 	var checksum string
 
@@ -590,7 +594,7 @@ func (client *Client) RemDir(args Args, item RodsItem) ([]RodsItem, error) {
 }
 
 func (client *Client) listRecurse(args Args, item RodsItem) ([]RodsItem, error) {
-	var items RodsItemArr
+	var items []RodsItem
 
 	if item.IsDataObject() {
 		item.client = client
@@ -615,7 +619,7 @@ func (client *Client) listRecurse(args Args, item RodsItem) ([]RodsItem, error) 
 			}
 		}
 	}
-	sort.Sort(items)
+	SortRodsItems(items)
 
 	for i := range items {
 		items[i].client = client
@@ -755,7 +759,7 @@ func wrap(operation string, args Args, target RodsItem) *Envelope {
 }
 
 func unwrap(client *Client, envelope *Envelope) ([]RodsItem, error) {
-	var items RodsItemArr
+	var items []RodsItem
 	if envelope.ErrorMsg != nil {
 		re := RodsError{errors.New(envelope.ErrorMsg.Message),
 			envelope.ErrorMsg.Code}
@@ -779,28 +783,28 @@ func unwrap(client *Client, envelope *Envelope) ([]RodsItem, error) {
 			"result (no content)", envelope.Operation)
 	}
 
-	sort.Sort(items)
+	SortRodsItems(items)
 
 	for i := range items {
 		items[i].client = client
 
-		var contents RodsItemArr = items[i].IContents
+		var contents = items[i].IContents
 		for j := range contents {
 			contents[j].client = client
 		}
-		sort.Sort(contents)
+		SortRodsItems(contents)
 		items[i].IContents = contents
 
-		var avus AVUArr = items[i].IAVUs
-		sort.Sort(avus)
+		var avus = items[i].IAVUs
+		SortAVUs(avus)
 		items[i].IAVUs = avus
 
-		var acls ACLArr = items[i].IACLs
-		sort.Sort(acls)
+		var acls = items[i].IACLs
+		SortACLs(acls)
 		items[i].IACLs = acls
 
-		var timestamps TimestampArr = items[i].ITimestamps
-		sort.Sort(timestamps)
+		var timestamps = items[i].ITimestamps
+		SortTimestamps(timestamps)
 		items[i].ITimestamps = timestamps
 	}
 

@@ -23,7 +23,6 @@ package extendo
 import (
 	"fmt"
 	"os/user"
-	"sort"
 	"time"
 
 	dcterms "github.com/kjsanger/extendo/dublincore"
@@ -92,14 +91,14 @@ func SetIntersectAVUs(x []AVU, y []AVU) []AVU {
 		mx[avu] = struct{}{}
 	}
 
-	var intersection AVUArr
+	var intersection []AVU
 	for _, avu := range y {
 		if _, ok := mx[avu]; ok {
 			intersection = append(intersection, avu)
 		}
 	}
 
-	sort.Sort(intersection)
+	SortAVUs(intersection)
 	return intersection
 }
 
@@ -108,7 +107,7 @@ func SetIntersectAVUs(x []AVU, y []AVU) []AVU {
 func SetUnionAVUs(x []AVU, y []AVU) []AVU {
 	mx := make(map[AVU]struct{})
 
-	var union AVUArr
+	var union []AVU
 	for _, avu := range x {
 		if _, ok := mx[avu]; !ok {
 			mx[avu] = struct{}{}
@@ -122,7 +121,7 @@ func SetUnionAVUs(x []AVU, y []AVU) []AVU {
 		}
 	}
 
-	sort.Sort(union)
+	SortAVUs(union)
 	return union
 }
 
@@ -135,14 +134,14 @@ func SetDiffAVUs(x []AVU, y []AVU) []AVU {
 		my[avu] = struct{}{}
 	}
 
-	var diff AVUArr
+	var diff []AVU
 	for _, avu := range x {
 		if _, ok := my[avu]; !ok {
 			diff = append(diff, avu)
 		}
 	}
 
-	sort.Sort(diff)
+	SortAVUs(diff)
 	return diff
 }
 
@@ -154,17 +153,11 @@ func UniqAVUs(avus []AVU) []AVU {
 		m[avu] = struct{}{}
 	}
 
-	var uniq AVUArr
+	var uniq []AVU
 	for avu, _ := range m {
 		uniq = append(uniq, avu)
 	}
 
-	sort.Sort(uniq)
-
+	SortAVUs(uniq)
 	return uniq
-}
-
-func SortAVUs(avus AVUArr) []AVU {
-	sort.Sort(avus)
-	return avus
 }
