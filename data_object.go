@@ -39,7 +39,7 @@ func NewDataObject(client *Client, remotePath string) *DataObject {
 	return &DataObject{&RodsItem{client: client, IPath: path, IName: name}}
 }
 
-// PutDataObject make a new instance by sending a file local at localPath
+// PutDataObject makes a new instance by sending a file local at localPath
 // to remotePath in iRODS. It always uses a forced put operation and
 // calculates a server-side checksum. If any slices of AVUs are supplied, they
 // are added after the put operation is successful. The returned instance has
@@ -99,7 +99,7 @@ func PutDataObject(client *Client, localPath string, remotePath string,
 	return obj, err
 }
 
-// ArchiveDataObject copies a file to a data object.  The intended use case is
+// ArchiveDataObject copies a file to a data object. The intended use case is
 // for when setting a canonical form for the data for long term storage,
 // superseding any file and metadata already there.
 //
@@ -140,10 +140,13 @@ func (obj *DataObject) Remove() error {
 	return err
 }
 
+// Checksum returns the locally cached checksum of the data object.
 func (obj *DataObject) Checksum() string {
 	return obj.IChecksum
 }
 
+// CalculateChecksum causes the remote checksum to be recalculated and updates
+// its local cache, returning the new checksum.
 func (obj *DataObject) CalculateChecksum() (string, error) {
 	item, err := obj.client.Checksum(Args{Checksum: true, Force: true}, *obj.RodsItem)
 	if err != nil {
@@ -154,6 +157,7 @@ func (obj *DataObject) CalculateChecksum() (string, error) {
 	return obj.IChecksum, err
 }
 
+// FetchChecksum fetches the remote checksum, caches it locally and returns it.
 func (obj *DataObject) FetchChecksum() (string, error) {
 	checksum, err := obj.client.ListChecksum(*obj.RodsItem)
 	if err != nil {
@@ -164,6 +168,8 @@ func (obj *DataObject) FetchChecksum() (string, error) {
 	return obj.IChecksum, err
 }
 
+// HasValidChecksum returns true if the current remote checksum matches the
+// expected value. It does not recalculate the remote checksum.
 func (obj *DataObject) HasValidChecksum(expected string) (bool, error) {
 	if len(expected) == 0 {
 		return false, errors.New("expected checksum was empty")
@@ -181,6 +187,8 @@ func (obj *DataObject) HasValidChecksum(expected string) (bool, error) {
 	return checksum == expected, err
 }
 
+// HasValidChecksumMetadata returns true if the current checksum metadata
+// (with the key ChecksumAttr) matches the expected value.
 func (obj *DataObject) HasValidChecksumMetadata(expected string) (bool, error) {
 	if len(expected) == 0 {
 		return false, errors.New("expected checksum was empty")
