@@ -32,12 +32,15 @@ type Collection struct {
 	*RodsItem
 }
 
+// NewCollection makes a new instance, given a path in iRODS (existing, or not).
 func NewCollection(client *Client, remotePath string) *Collection {
 	remotePath = filepath.Clean(remotePath)
 
 	return &Collection{&RodsItem{client: client, IPath: remotePath}}
 }
 
+// MakeCollection creates a new collection in iRODS and returns an instance. It
+// will create any leading collections as required.
 func MakeCollection(client *Client, remotePath string) (*Collection, error) {
 	remotePath = filepath.Clean(remotePath)
 
@@ -57,13 +60,14 @@ func MakeCollection(client *Client, remotePath string) (*Collection, error) {
 	// https://github.com/irods/irods/issues/4547
 	//
 	// This retry is a workaround to block and wait for the collection to
-	// appear. It's quite ugly, but simple and fixes
+	// appear. It's quite ugly, but simple and fixes the issue.
 
 	log := logs.GetLogger()
 
 	var exists bool
-	maxTries, backoffFactor := 10, 2
+	maxTries, backoffFactor := 3, 2
 
+	begin := time.Now()
 	for try := 0; try < maxTries; try++ {
 		exists, err = coll.Exists()
 		if exists || err != nil {
@@ -79,8 +83,9 @@ func MakeCollection(client *Client, remotePath string) (*Collection, error) {
 	}
 
 	if !exists {
-		err = errors.Errorf("timed out waiting for "+
-			"collection '%s' to appear", remotePath)
+		duration := time.Now().Sub(begin)
+		err = errors.Errorf("timed out after %d seconds waiting for "+
+			"collection '%s' to appear", uint64(duration.Seconds()), remotePath)
 	}
 
 	return coll, err

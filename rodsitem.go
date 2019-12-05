@@ -396,8 +396,8 @@ func SortTimestamps(times []Timestamp) {
 		mi := !times[i].Modified.IsZero() // Is times modification time
 		mj := !times[j].Modified.IsZero()
 
-	return (ci && !cj) || (!mi && mj) ||
-		(ci && cj && times[i].Created.Before(times[j].Created)) ||
-		(mi && mj && times[i].Modified.Before(times[j].Created))
+		return (ci && !cj) || (!mi && mj) ||
+			(ci && cj && times[i].Created.Before(times[j].Created)) ||
+			(mi && mj && times[i].Modified.Before(times[j].Created))
 	})
 }
