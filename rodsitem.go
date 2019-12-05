@@ -266,8 +266,8 @@ func (item *RodsItem) ReplaceMetadata(avus []AVU) error {
 
 	// Update our cache of the final AVUs. We could call item.FetchMetadata()
 	// again, but this saves a trip to the server.
-	var final AVUArr = SetUnionAVUs(toAdd, SetDiffAVUs(currentAVUs, toRemove))
-	sort.Sort(final)
+	var final = SetUnionAVUs(toAdd, SetDiffAVUs(currentAVUs, toRemove))
+	SortAVUs(final)
 
 	log.Debug().Str("path", item.String()).Msgf("AVUs %v", final)
 
@@ -293,33 +293,27 @@ func CopyRodsItem(item RodsItem) RodsItem {
 	}
 }
 
-type RodsItemArr []RodsItem
+// SortRodsItems sorts items by Path, sorting Collections before DataObjects.
+func SortRodsItems(items []RodsItem) {
+	sort.SliceStable(items, func(i, j int) bool {
 
-func (a RodsItemArr) Len() int {
-	return len(a)
-}
+		iColl := items[i].IsCollection()
+		jColl := items[j].IsCollection()
 
-func (a RodsItemArr) Swap(i, j int) {
-	a[i], a[j] = a[j], a[i]
-}
+		switch {
+		case iColl && !jColl: // collection / data object
+			return true
+		case !iColl && jColl: // data object / collection
+			return false
+		case iColl && jColl: // collection / collection
+			return items[i].IPath < items[j].IPath
+		case items[i].IPath == items[j].IPath: // data object / data object
+			return items[i].IName < items[j].IName
+		}
 
-func (a RodsItemArr) Less(i, j int) bool {
-	iColl := a[i].IsCollection()
-	jColl := a[j].IsCollection()
-
-	switch {
-	case iColl && !jColl: // collection / data object
-		return true
-	case !iColl && jColl: // data object / collection
-		return false
-	case iColl && jColl: // collection / collection
-		return a[i].IPath < a[j].IPath
-	case a[i].IPath == a[j].IPath: // data object / data object
-		return a[i].IName < a[j].IName
-	}
-
-	// data object / data object
-	return a[i].IPath < a[j].IPath
+		// data object / data object
+		return items[i].IPath < items[j].IPath
+	})
 }
 
 // ACL is an access control list. Owner may be a user, or more often, a data
@@ -333,20 +327,13 @@ type ACL struct {
 	Zone string `json:"zone"`
 }
 
-type ACLArr []ACL
-
-func (a ACLArr) Len() int {
-	return len(a)
-}
-
-func (a ACLArr) Swap(i, j int) {
-	a[i], a[j] = a[j], a[i]
-}
-
-func (a ACLArr) Less(i, j int) bool {
-	return a[i].Zone < a[j].Zone ||
-		a[i].Owner < a[j].Owner ||
-		a[i].Level < a[j].Level
+// SortACLs sorts acls by Zone, then Owner and finally, Level.
+func SortACLs(acls []ACL) {
+	sort.SliceStable(acls, func(i, j int) bool {
+		return acls[i].Zone < acls[j].Zone ||
+			acls[i].Owner < acls[j].Owner ||
+			acls[i].Level < acls[j].Level
+	})
 }
 
 // AVU is an iRODS attribute, value, units triple.
@@ -357,25 +344,16 @@ type AVU struct {
 	Operator string `json:"operator,omitempty"`
 }
 
-type AVUArr []AVU
-
-func (a AVUArr) Len() int {
-	return len(a)
+// SortAVUs sorts avus by Attr, then Value and finally, Units.
+func SortAVUs(avus []AVU) {
+	sort.SliceStable(avus, func(i, j int) bool {
+		return avus[i].Attr < avus[j].Attr ||
+			avus[i].Value < avus[j].Value ||
+			avus[i].Units < avus[j].Units
+	})
 }
 
-func (a AVUArr) Swap(i, j int) {
-	a[i], a[j] = a[j], a[i]
-}
-
-func (a AVUArr) Less(i, j int) bool {
-	return AVULess(a[i], a[j])
-}
-
-func AVULess(x AVU, y AVU) bool {
-	return x.Attr < y.Attr || x.Value < y.Value || x.Units < y.Units
-}
-
-// Number is a data object replicate
+// Replicate is a data object replicate.
 type Replicate struct {
 	// Resource is the resource name where the replicate is located
 	Resource string `json:"resource"`
@@ -389,22 +367,16 @@ type Replicate struct {
 	Valid bool `json:"valid"`
 }
 
-type ReplicateArr []Replicate
-
-func (a ReplicateArr) Len() int {
-	return len(a)
-}
-
-func (a ReplicateArr) Swap(i, j int) {
-	a[i], a[j] = a[j], a[i]
-}
-
-func (a ReplicateArr) Less(i, j int) bool {
-	return a[i].Resource < a[j].Resource ||
-		a[i].Location < a[j].Location ||
-		a[i].Number < a[j].Number ||
-		a[i].Checksum < a[j].Checksum ||
-		(a[i].Valid && !a[j].Valid)
+// SortReplicates sorts reps by Resource, then Location, then Number, then
+// Checksum and finally, Valis.
+func SortReplicates(reps []Replicate) {
+	sort.SliceStable(reps, func(i, j int) bool {
+		return reps[i].Resource < reps[j].Resource ||
+			reps[i].Location < reps[j].Location ||
+			reps[i].Number < reps[j].Number ||
+			reps[i].Checksum < reps[j].Checksum ||
+			(reps[i].Valid && !reps[j].Valid)
+	})
 }
 
 type Timestamp struct {
@@ -413,25 +385,19 @@ type Timestamp struct {
 	Operator string    `json:"operator,omitempty"`
 }
 
-type TimestampArr []Timestamp
+// SortTimestamps sorts times by Created and then by Modified.
+func SortTimestamps(times []Timestamp) {
+	// Less if a Created time and other time is Zero is Created later, OR
+	// a Modified time and other time is Zero or is Modified later.
 
-func (a TimestampArr) Len() int {
-	return len(a)
-}
-
-func (a TimestampArr) Swap(i, j int) {
-	a[i], a[j] = a[j], a[i]
-}
-
-// Less if a Created time and other time is Zero is Created later, OR
-// a Modified time and other time is Zero or is Modified later.
-func (a TimestampArr) Less(i, j int) bool {
-	ci := !a[i].Created.IsZero() // Is a creation time
-	cj := !a[j].Created.IsZero()
-	mi := !a[i].Modified.IsZero() // Is a modification time
-	mj := !a[j].Modified.IsZero()
+	sort.SliceStable(times, func(i, j int) bool {
+		ci := !times[i].Created.IsZero() // Is times creation time
+		cj := !times[j].Created.IsZero()
+		mi := !times[i].Modified.IsZero() // Is times modification time
+		mj := !times[j].Modified.IsZero()
 
 	return (ci && !cj) || (!mi && mj) ||
-		(ci && cj && a[i].Created.Before(a[j].Created)) ||
-		(mi && mj && a[i].Modified.Before(a[j].Created))
+		(ci && cj && times[i].Created.Before(times[j].Created)) ||
+		(mi && mj && times[i].Modified.Before(times[j].Created))
+	})
 }

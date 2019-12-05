@@ -185,5 +185,9 @@ func TestUniqAVUs(t *testing.T) {
 	avu2 := MakeAVU("w", "x", "z")
 
 	avus := []AVU{avu1, avu2, avu0, avu0, avu1, avu0, avu1}
-	assert.Equal(t, UniqAVUs(avus), SortAVUs([]AVU{avu0, avu1, avu2}))
+
+	expected := []AVU{avu0, avu1, avu2}
+	SortAVUs(expected)
+
+	assert.Equal(t, UniqAVUs(avus), expected)
 }
