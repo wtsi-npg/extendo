@@ -319,7 +319,7 @@ func SortRodsItems(items []RodsItem) {
 // ACL is an access control list. Owner may be a user, or more often, a data
 // access group.
 type ACL struct {
-	// Owner isn the iRODS group (or user)
+	// Owner is the iRODS group (or user)
 	Owner string `json:"owner"`
 	// Level is the iRODS access level (null, read, own etc)
 	Level string `json:"level"`
@@ -368,7 +368,7 @@ type Replicate struct {
 }
 
 // SortReplicates sorts reps by Resource, then Location, then Number, then
-// Checksum and finally, Valis.
+// Checksum and finally, Valid.
 func SortReplicates(reps []Replicate) {
 	sort.SliceStable(reps, func(i, j int) bool {
 		return reps[i].Resource < reps[j].Resource ||

@@ -119,7 +119,7 @@ func PutCollection(client *Client, localPath string, remotePath string,
 	}
 
 	item.client = client
-	coll := &Collection{ &item}
+	coll := &Collection{&item}
 
 	return coll, err
 }
