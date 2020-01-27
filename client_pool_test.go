@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019. Genome Research Ltd. All rights reserved.
+ * Copyright (C) 2019, 2020. Genome Research Ltd. All rights reserved.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,6 +21,7 @@
 package extendo_test
 
 import (
+	_ "net/http/pprof"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -28,6 +29,7 @@ import (
 
 	ex "github.com/kjsanger/extendo"
 )
+
 
 var _ = Describe("Make a client pool", func() {
 	var pool *ex.ClientPool
@@ -60,7 +62,7 @@ var _ = Describe("Get clients from the pool", func() {
 	})
 
 	When("a pool of size n is created", func() {
-		It("should supply n running clients before Get times out", func() {
+		It("Get should supply n isRunning clients before timing out", func() {
 
 		loop:
 			for timeout := time.After(time.Second * 10); ; {
@@ -83,6 +85,18 @@ var _ = Describe("Get clients from the pool", func() {
 			for _, c := range clients {
 				Expect(c.IsRunning()).To(BeTrue())
 			}
+		})
+	})
+
+	When("a pool is closed", func() {
+		BeforeEach(func() {
+			pool.Close()
+		})
+
+		It("should not be possible to get clients from it", func() {
+			c, err := pool.Get()
+			Expect(c).To(BeNil())
+			Expect(err).To(HaveOccurred())
 		})
 	})
 })
@@ -113,7 +127,7 @@ var _ = Describe("Return clients to the pool", func() {
 	})
 
 	When("a pool is open", func() {
-		It("should be possible to return the running clients", func() {
+		It("should be possible to return isRunning clients to it", func() {
 			for _, c := range clients {
 				Expect(c.IsRunning()).To(BeTrue())
 
@@ -123,10 +137,18 @@ var _ = Describe("Return clients to the pool", func() {
 				Expect(c.IsRunning()).To(BeTrue())
 			}
 		})
+
+		It("should be possible to return stopped clients to it", func() {
+			for _, c := range clients {
+				c.StopIgnoreError()
+				err := pool.Return(c)
+				Expect(err).NotTo(HaveOccurred())
+			}
+		})
 	})
 
 	When("a pool is closed", func() {
-		It("should be possible to return the running clients", func() {
+		It("should be possible to return isRunning clients to it", func() {
 			pool.Close()
 			for _, c := range clients {
 				Expect(c.IsRunning()).To(BeTrue())
@@ -135,6 +157,15 @@ var _ = Describe("Return clients to the pool", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				Expect(c.IsRunning()).To(BeFalse())
+			}
+		})
+
+		It("should be possible to return stopped clients to it", func() {
+			pool.Close()
+			for _, c := range clients {
+				c.StopIgnoreError()
+				err := pool.Return(c)
+				Expect(err).NotTo(HaveOccurred())
 			}
 		})
 	})
