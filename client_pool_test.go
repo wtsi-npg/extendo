@@ -62,7 +62,7 @@ var _ = Describe("Get clients from the pool", func() {
 	})
 
 	When("a pool of size n is created", func() {
-		It("Get should supply n isRunning clients before timing out", func() {
+		It("Get should supply n running clients before timing out", func() {
 
 		loop:
 			for timeout := time.After(time.Second * 10); ; {
@@ -127,7 +127,7 @@ var _ = Describe("Return clients to the pool", func() {
 	})
 
 	When("a pool is open", func() {
-		It("should be possible to return isRunning clients to it", func() {
+		It("should be possible to return running clients to it", func() {
 			for _, c := range clients {
 				Expect(c.IsRunning()).To(BeTrue())
 
@@ -148,7 +148,7 @@ var _ = Describe("Return clients to the pool", func() {
 	})
 
 	When("a pool is closed", func() {
-		It("should be possible to return isRunning clients to it", func() {
+		It("should be possible to return running clients to it", func() {
 			pool.Close()
 			for _, c := range clients {
 				Expect(c.IsRunning()).To(BeTrue())
@@ -167,6 +167,76 @@ var _ = Describe("Return clients to the pool", func() {
 				err := pool.Return(c)
 				Expect(err).NotTo(HaveOccurred())
 			}
+		})
+	})
+})
+
+
+var _ = Describe("Pool client runtime timeout", func() {
+	var poolSize = uint8(10)
+	var poolTimout = time.Millisecond * 250
+	var pool *ex.ClientPool
+	var clients []*ex.Client
+
+	BeforeEach(func() {
+		pool = ex.NewClientPool(poolSize, poolTimout)
+		pool.CheckFreq = time.Millisecond * 500
+
+		var newClients []*ex.Client
+		for i := 0; i < int(poolSize); i++ {
+			c, err := pool.Get()
+			Expect(err).NotTo(HaveOccurred())
+			if err == nil {
+				newClients = append(newClients, c)
+			}
+		}
+
+		clients = newClients
+	})
+
+	AfterEach(func() {
+		pool.Close()
+	})
+
+	When("a pool is open", func() {
+		When("clients have run longer than MaxRuntime", func() {
+			BeforeEach(func() {
+				pool.MaxRuntime = time.Millisecond * 500
+				pool.MaxIdleTime = time.Minute
+
+				for _, c := range clients {
+					err := pool.Return(c)
+					Expect(err).NotTo(HaveOccurred())
+				}
+			})
+
+			It("should stop those clients returned to it", func() {
+				time.Sleep(time.Second * 2)
+
+				for _, c := range clients {
+					Expect(c.IsRunning()).To(BeFalse())
+				}
+			})
+		})
+
+		When("clients have been idle longer than MaxIdleTime", func() {
+			BeforeEach(func() {
+				pool.MaxRuntime = time.Minute
+				pool.MaxIdleTime = time.Millisecond * 500
+
+				for _, c := range clients {
+					err := pool.Return(c)
+					Expect(err).NotTo(HaveOccurred())
+				}
+			})
+
+			It("should stop those clients returned to it", func() {
+				time.Sleep(time.Second * 2)
+
+				for _, c := range clients {
+					Expect(c.IsRunning()).To(BeFalse())
+				}
+			})
 		})
 	})
 })

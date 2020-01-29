@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019. Genome Research Ltd. All rights reserved.
+ * Copyright (C) 2019, 2020. Genome Research Ltd. All rights reserved.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -76,11 +76,14 @@ type Client struct {
 	in           chan []byte        // For sending to the sub-process.
 	out          chan []byte        // For receiving from the sub-process.
 	err          chan error         // For recording any sub-process error.
-	running      bool               // Flag indicating that the sub-process is running.
 	respTimeout  time.Duration      // Timeout for the sub-process to respond.
 	cancel       context.CancelFunc // For stopping the I/O goroutines.
 	inWaitGroup  *sync.WaitGroup    // WaitGroup for STDIN goroutine.
 	outWaitGroup *sync.WaitGroup    // WaitGroup for STDOUT/STDERR goroutines.
+	isRunning    bool               // Flag indicating that the sub-process is running.
+	startTime    time.Time          // Time at which the sub-process was started.
+	stopTime     time.Time          // Time at which the sub-process completed.
+	activityTime time.Time          // Time of the last activity.
 }
 
 // Envelope is the JSON document accepted by baton-do, describing an operation
@@ -241,11 +244,11 @@ func NewClient(path string) (*Client, error) {
 // arguments to the baton program. If the program is already running and Start
 // is called, an error is raised.
 func (client *Client) Start(arg ...string) (*Client, error) {
-	log := logs.GetLogger()
-
-	if client.IsRunning() {
+	if client.isRunning {
 		return client, errors.New("client is already running")
 	}
+
+	log := logs.GetLogger()
 
 	cmd := exec.Command(client.path, arg...)
 	stdin, err := cmd.StdinPipe()
@@ -372,14 +375,17 @@ func (client *Client) Start(arg ...string) (*Client, error) {
 	}(cancelCtx)
 
 	// Watch for baton sub-process completion and capture any error
-	go func() {
+	go func(c *Client) {
 		inWg.Wait()
 		outWg.Wait()
 		perr := cmd.Wait()
 
-		client.running = false
-		client.err <- perr
-	}()
+		c.isRunning = false
+		c.stopTime = time.Now()
+
+		c.err <- perr
+		close(c.err)
+	}(client)
 
 	client.cmd = cmd
 	client.stdin = stdin
@@ -388,7 +394,8 @@ func (client *Client) Start(arg ...string) (*Client, error) {
 	client.in = pin
 	client.out = pout
 	client.err = perr
-	client.running = true
+	client.isRunning = true
+	client.startTime = time.Now()
 	client.respTimeout = DefaultResponseTimeout
 	client.cancel = cancel
 	client.inWaitGroup = &inWg
@@ -405,13 +412,33 @@ func (client *Client) Stop() error {
 	return <-client.err
 }
 
+// IdleTime returns the duration for which the client has been idle (time
+// elapsed since the last request sent to the sub-process). If the client is no
+// longer, running returns the time since the client stopped.
+func (client *Client) IdleTime() time.Duration {
+	if client.isRunning {
+		return time.Since(client.activityTime)
+	}
+	return client.stopTime.Sub(client.activityTime)
+}
+
+// Runtime returns the duration for which the client has run. If the client is
+// running, it reports time spent so far. If the client has been stopped, it
+// reports the duration for which it ran.
+func (client *Client) Runtime() time.Duration {
+	if client.isRunning {
+		return time.Since(client.startTime)
+	}
+	return client.stopTime.Sub(client.startTime)
+}
+
 // Stop stops the baton sub-process, if it is running. Ignores any error
 // from the sub-process.
 func (client *Client) StopIgnoreError() {
-	if !client.IsRunning() {
+	if !client.isRunning {
 		return
 	}
-	pid := client.ClientPid()
+	pid := client.cmd.Process.Pid
 	if err := client.Stop(); err != nil {
 		logs.GetLogger().Error().Err(err).Int("pid", pid).
 			Msg("stopped client")
@@ -421,7 +448,7 @@ func (client *Client) StopIgnoreError() {
 // ClientPid returns the process ID of the baton sub-process if it has started,
 // or -1 otherwise.
 func (client *Client) ClientPid() int {
-	if client.IsRunning() {
+	if client.isRunning {
 		return client.cmd.Process.Pid
 	}
 	return -1
@@ -429,7 +456,7 @@ func (client *Client) ClientPid() int {
 
 // IsRunning returns true if the client's baton sub-process is running.
 func (client *Client) IsRunning() bool {
-	return client.running
+	return client.isRunning
 }
 
 // Chmod sets permissions on a collection or data object in iRODS. By setting
@@ -703,9 +730,11 @@ func (client *Client) putRecurse(args Args, item RodsItem) ([]RodsItem, error) {
 
 func (client *Client) execute(op string, args Args, item RodsItem) ([]RodsItem,
 	error) {
-	if !client.IsRunning() {
+	if !client.isRunning {
 		return []RodsItem{}, errors.New("client is not running")
 	}
+
+	client.activityTime = time.Now()
 
 	response, err := client.send(wrap(op, args, item))
 	if err != nil {
@@ -738,7 +767,7 @@ waitResponse:
 		case <-time.After(client.respTimeout):
 			// If the sub-process is running we just wait again, until either
 			// it responds or stops running.
-			if !client.IsRunning() {
+			if !client.isRunning {
 				return nil, errors.New("receiving failed")
 			}
 			log.Debug().Str("executable", client.path).
