@@ -74,7 +74,7 @@ var _ = Describe("Start and stop the Item client", func() {
 	})
 
 	Describe("Stop and start", func() {
-		Context("When the client is not running", func() {
+		When("the client is not running", func() {
 			It("should start without error", func() {
 				Expect(err).NotTo(HaveOccurred())
 			})
@@ -92,7 +92,7 @@ var _ = Describe("Start and stop the Item client", func() {
 			})
 		})
 
-		Context("When the client is running", func() {
+		When("the client is running", func() {
 			BeforeEach(func() {
 				err = client.Stop()
 			})

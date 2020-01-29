@@ -31,7 +31,7 @@ import (
 )
 
 // ClientPool is a pool of iRODS Clients for use by applications. It provides
-// a way for an application to obtain a isRunning Client without itself having to
+// a way for an application to obtain a running Client without itself having to
 // manage the number of connections or handle retries when a Client connection
 // can't be obtained for some reason (e.g. the maximum number of connections is
 // reached, a network error occurs, the iRODS server fails).
@@ -43,14 +43,17 @@ import (
 // return an error on Get(), but will allow Return(). A closed pool may not
 // be re-opened.
 type ClientPool struct {
-	clientArgs []string      // baton-do arguments
-	timeout    time.Duration // Timeout for Get() and Return()
-	maxRetries uint8         // Max retries for Get()
-	sync.Mutex               // Lock for IsOpen(), Get(), Return() and Close()
-	isOpen     bool          // True if the pool is open
-	clients    []*Client     // Running clients in the pool
-	numClients uint8
-	maxClients uint8
+	clientArgs  []string      // baton-do arguments.
+	timeout     time.Duration // Timeout for Get() and Return().
+	maxRetries  uint8         // Max retries for Get().
+	CheckFreq   time.Duration // Frequency at which clients are checked.
+	MaxIdleTime time.Duration // Idle time after which clients will be stopped.
+	MaxRuntime  time.Duration // Runtime after which clients will be stopped.
+	sync.Mutex                // Lock for IsOpen(), Get(), Return() and Close().
+	isOpen      bool          // True if the pool is open.
+	clients     []*Client     // Running clients in the pool.
+	numClients  uint8         // The number of clients created by the pool.
+	maxClients  uint8         // The maximum number of clients permitted.
 }
 
 var (
@@ -71,12 +74,17 @@ func NewClientPool(maxSize uint8, timeout time.Duration,
 	processedArgs = utilities.Uniq(append(processedArgs, clientArgs...))
 
 	pool := ClientPool{
-		clientArgs: processedArgs,
-		timeout:    timeout,
-		maxRetries: uint8(3),
-		isOpen:     true,
-		maxClients: maxSize,
+		clientArgs:  processedArgs,
+		timeout:     timeout,
+		maxRetries:  uint8(3),
+		CheckFreq:   time.Second * 10,
+		MaxRuntime:  time.Hour,
+		MaxIdleTime: time.Minute * 10,
+		isOpen:      true,
+		maxClients:  maxSize,
 	}
+
+	go pool.checkClients()
 
 	return &pool
 }
@@ -89,7 +97,7 @@ func (pool *ClientPool) IsOpen() bool {
 	return pool.isOpen
 }
 
-// Get returns a isRunning Client from the pool, or creates a new one. It returns
+// Get returns a running Client from the pool, or creates a new one. It returns
 // an error if the pool is closed, if the attempt to get a Client exceeds the
 // pool's timeout, or if an error is encountered creating the Client.
 func (pool *ClientPool) Get() (*Client, error) {
@@ -120,12 +128,14 @@ func (pool *ClientPool) getWithRetries() (*Client, error) {
 		"after %d tries", pool.maxRetries)
 }
 
-// Tries to get ot create a Client, with a timeout.
+// Tries to get or create a Client, with a timeout.
 func (pool *ClientPool) getWithTimeout() (*Client, error) {
 	log := logs.GetLogger()
 
 	timeout := time.NewTimer(pool.timeout)
 	defer timeout.Stop()
+
+	interval := time.Microsecond * 100
 
 	for {
 		select {
@@ -158,17 +168,75 @@ func (pool *ClientPool) getWithTimeout() (*Client, error) {
 				pool.Unlock()
 				return client, err
 			}
-
 			pool.Unlock()
 
-			interval := time.Microsecond * 100
-			log.Debug().Msgf("sleeping ... %s", interval)
-			time.Sleep(interval)
+			time.Sleep(interval) // A client may become available later
 		}
 	}
 }
 
-// Return allows a client to be returned to the pool. If the client is isRunning,
+// checkClients periodically, while to pool is open, examines all the unused
+// clients in the pool to see whether any of them can be stopped and discarded.
+// The reasons for discarding clients are: have been running for longer than
+// the MaxRuntime, have been idle longer than the MaxIdleTime, or have stopped
+// for another reason e.g. crashed or externally terminated.
+//
+// As the clients are unused and the pool is locked during this process, there
+// is no danger of disconnecting an active client.
+func (pool *ClientPool) checkClients() {
+	checkTick := time.NewTicker(pool.CheckFreq)
+	defer checkTick.Stop()
+
+	log := logs.GetLogger()
+
+	for {
+		select {
+		case <-checkTick.C:
+			pool.Lock()
+			if !pool.isOpen {
+				log.Debug().Msg("stopping client check")
+				pool.Unlock()
+				return
+			}
+
+			var keep []*Client
+			numRemoved := uint8(0)
+			for _, c := range pool.clients {
+				rt := c.Runtime()
+
+				if !c.IsRunning() {
+					log.Debug().Dur("runtime", rt).
+						Msg("removing one stopped client")
+					numRemoved++
+				} else if c.Runtime() > pool.MaxRuntime {
+					log.Debug().Int("pid", c.ClientPid()).
+						Dur("runtime", rt).
+						Dur("max_runtime", pool.MaxRuntime).
+						Msg("stopping long running client")
+					stopAndLog(c, log)
+					numRemoved++
+				} else if c.IdleTime() > pool.MaxIdleTime {
+					log.Debug().Int("pid", c.ClientPid()).
+						Dur("runtime", rt).
+						Msg("stopping idle client")
+					stopAndLog(c, log)
+					numRemoved++
+				} else {
+					keep = append(keep, c)
+				}
+			}
+
+			if uint8(len(keep)) != pool.size() {
+				pool.clients = keep
+				pool.numClients = pool.numClients - numRemoved
+			}
+
+			pool.Unlock()
+		}
+	}
+}
+
+// Return allows a client to be returned to the pool. If the client is running,
 // it is returned to the pool. If the client has crashed or been stopped, this
 // method will discard it and decrement the client count so that a new one can
 // be created. If the pool has been closed, clients may still be returned,
@@ -191,14 +259,14 @@ func (pool *ClientPool) Return(client *Client) error {
 		return nil
 	}
 
-	if uint8(pool.size()) < pool.maxClients {
+	if pool.size() < pool.maxClients {
 		pool.push(client)
-		log.Debug().Msgf("returned 1 client (isRunning) to the pool making %d",
+		log.Debug().Msgf("returned 1 client (running) to the pool making %d",
 			pool.size())
 		return nil
 	}
 
-	log.Debug().Msg("discarding 1 client (isRunning), pool full")
+	log.Debug().Msg("discarding 1 client (running), pool full")
 
 	return client.Stop()
 }
@@ -224,17 +292,12 @@ func (pool *ClientPool) Close() {
 		}
 
 		log.Debug().Int("pid", c.ClientPid()).Msg("stopping client")
-		err = c.Stop()
-		if err != nil {
-			log.Error().Err(err).
-				Int("pid", c.ClientPid()).
-				Msg("client did not stop cleanly")
-		}
+		stopAndLog(c, log)
 	}
 }
 
-func (pool *ClientPool) size() int {
-	return len(pool.clients)
+func (pool *ClientPool) size() uint8 {
+	return uint8(len(pool.clients))
 }
 
 func (pool *ClientPool) isEmpty() bool {
@@ -254,4 +317,13 @@ func (pool *ClientPool) pop() (*Client, error) {
 
 func (pool *ClientPool) push(client *Client) {
 	pool.clients = append(pool.clients, client)
+}
+
+func stopAndLog(client *Client, log logs.Logger) {
+	err := client.Stop()
+	if err != nil {
+		log.Error().Err(err).
+			Int("pid", client.ClientPid()).
+			Msg("client did not stop cleanly")
+	}
 }
