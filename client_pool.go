@@ -36,24 +36,24 @@ import (
 // can't be obtained for some reason (e.g. the maximum number of connections is
 // reached, a network error occurs, the iRODS server fails).
 //
-// Applications should use the NewClientPool to create a pool and then use
+// Applications should use NewClientPool() to create a pool and then use
 // the ClientPool's Get() and Return() methods to obtain and release Clients.
 //
 // Once a ClientPool has been created it may be closed. A closed pool will
 // return an error on Get(), but will allow Return(). A closed pool may not
 // be re-opened.
 type ClientPool struct {
-	clientArgs  []string      // baton-do arguments.
-	timeout     time.Duration // Timeout for Get() and Return().
-	maxRetries  uint8         // Max retries for Get().
-	CheckFreq   time.Duration // Frequency at which clients are checked.
-	MaxIdleTime time.Duration // Idle time after which clients will be stopped.
-	MaxRuntime  time.Duration // Runtime after which clients will be stopped.
-	sync.Mutex                // Lock for IsOpen(), Get(), Return() and Close().
-	isOpen      bool          // True if the pool is open.
-	clients     []*Client     // Running clients in the pool.
-	numClients  uint8         // The number of clients created by the pool.
-	maxClients  uint8         // The maximum number of clients permitted.
+	clientArgs        []string      // baton-do arguments.
+	getTimeout        time.Duration // Timeout for Get().
+	getMaxRetries     uint8         // Max retries for Get().
+	checkClientFreq   time.Duration // Frequency at which clients are checked.
+	maxClientIdleTime time.Duration // Idle time after which clients will be stopped.
+	maxClientRuntime  time.Duration // Runtime after which clients will be stopped.
+	sync.Mutex                      // Lock for IsOpen(), Get(), Return() and Close().
+	isOpen            bool          // True if the pool is open.
+	clients           []*Client     // Running clients in the pool.
+	numClients        uint8         // The number of clients created by the pool.
+	maxSize           uint8         // The maximum number of clients permitted.
 }
 
 var (
@@ -63,25 +63,45 @@ var (
 	errGetTimeout = errors.New("timeout getting client from the pool")
 )
 
-// NewClientPool creates a new pool that will hold up to maxSize Clients. The
-// Get() method will try to obtain a running Client on request for up to the
-// specified timeout before returning an error. The clientArgs arguments will
-// be passed to the FindAndStart() method when creating each new Client.
-func NewClientPool(maxSize uint8, timeout time.Duration,
-	clientArgs ...string) *ClientPool {
+// ClientPoolParams describes the available parameters for pool creation.
+type ClientPoolParams struct {
+	MaxSize           uint8         // Maximum number of clients.
+	GetTimeout        time.Duration // Timeout for Get()
+	GetMaxRetries     uint8         // Max retries for Get().
+	CheckClientFreq   time.Duration // Frequency of check for old, idle or stopped clients.
+	MaxClientRuntime  time.Duration // Runtime after which clients are considered old.
+	MaxClientIdleTime time.Duration // Inactivity time after which clients are considered idle.
+}
+
+// The default argument values for client pool creation.
+var DefaultClientPoolParams = ClientPoolParams{
+	MaxSize:           10,
+	GetTimeout:        time.Millisecond * 250,
+	GetMaxRetries:     3,
+	CheckClientFreq:   time.Second * 30,
+	MaxClientRuntime:  time.Hour,
+	MaxClientIdleTime: time.Minute * 10,
+}
+
+// NewClientPool creates a new pool that will hold up to params.MaxSize
+// Clients. The Get() method will try to obtain a running Client on request for
+// up to the specified params.construction before returning an error. The
+// clientArgs arguments will be passed to the FindAndStart() method when
+// creating each new Client.
+func NewClientPool(params ClientPoolParams, clientArgs ...string) *ClientPool {
 
 	processedArgs := []string{"--unbuffered", "--no-error"} // Always need this
 	processedArgs = utilities.Uniq(append(processedArgs, clientArgs...))
 
 	pool := ClientPool{
-		clientArgs:  processedArgs,
-		timeout:     timeout,
-		maxRetries:  uint8(3),
-		CheckFreq:   time.Second * 10,
-		MaxRuntime:  time.Hour,
-		MaxIdleTime: time.Minute * 10,
-		isOpen:      true,
-		maxClients:  maxSize,
+		clientArgs:        processedArgs,
+		getTimeout:        params.GetTimeout,
+		getMaxRetries:     params.GetMaxRetries,
+		checkClientFreq:   params.CheckClientFreq,
+		maxClientRuntime:  params.MaxClientRuntime,
+		maxClientIdleTime: params.MaxClientIdleTime,
+		isOpen:            true,
+		maxSize:           params.MaxSize,
 	}
 
 	go pool.checkClients()
@@ -104,11 +124,11 @@ func (pool *ClientPool) Get() (*Client, error) {
 	return pool.getWithRetries()
 }
 
-// Tries up to maxRetries times to get a Client, each time with a timeout.
+// Tries up to getMaxRetries times to get a Client, each time with a timeout.
 func (pool *ClientPool) getWithRetries() (*Client, error) {
 	log := logs.GetLogger()
 
-	for try := 0; try < int(pool.maxRetries); try++ {
+	for try := 0; try < int(pool.getMaxRetries); try++ {
 		log.Debug().Int("try", try).Msg("getting a client")
 
 		client, err := pool.getWithTimeout()
@@ -125,14 +145,14 @@ func (pool *ClientPool) getWithRetries() (*Client, error) {
 	}
 
 	return nil, errors.Errorf("failed to get a client from the pool "+
-		"after %d tries", pool.maxRetries)
+		"after %d tries", pool.getMaxRetries)
 }
 
 // Tries to get or create a Client, with a timeout.
 func (pool *ClientPool) getWithTimeout() (*Client, error) {
 	log := logs.GetLogger()
 
-	timeout := time.NewTimer(pool.timeout)
+	timeout := time.NewTimer(pool.getTimeout)
 	defer timeout.Stop()
 
 	interval := time.Microsecond * 100
@@ -157,7 +177,7 @@ func (pool *ClientPool) getWithTimeout() (*Client, error) {
 				return client, err
 			}
 
-			if pool.numClients < pool.maxClients {
+			if pool.numClients < pool.maxSize {
 				client, err := FindAndStart(pool.clientArgs...)
 				if err == nil {
 					pool.numClients++
@@ -178,13 +198,13 @@ func (pool *ClientPool) getWithTimeout() (*Client, error) {
 // checkClients periodically, while to pool is open, examines all the unused
 // clients in the pool to see whether any of them can be stopped and discarded.
 // The reasons for discarding clients are: have been running for longer than
-// the MaxRuntime, have been idle longer than the MaxIdleTime, or have stopped
-// for another reason e.g. crashed or externally terminated.
+// the maxClientRuntime, have been idle longer than the maxClientIdleTime, or
+// have stopped for another reason e.g. crashed or externally terminated.
 //
 // As the clients are unused and the pool is locked during this process, there
 // is no danger of disconnecting an active client.
 func (pool *ClientPool) checkClients() {
-	checkTick := time.NewTicker(pool.CheckFreq)
+	checkTick := time.NewTicker(pool.checkClientFreq)
 	defer checkTick.Stop()
 
 	log := logs.GetLogger()
@@ -208,14 +228,14 @@ func (pool *ClientPool) checkClients() {
 					log.Debug().Dur("runtime", rt).
 						Msg("removing one stopped client")
 					numRemoved++
-				} else if c.Runtime() > pool.MaxRuntime {
+				} else if c.Runtime() > pool.maxClientRuntime {
 					log.Debug().Int("pid", c.ClientPid()).
 						Dur("runtime", rt).
-						Dur("max_runtime", pool.MaxRuntime).
+						Dur("max_runtime", pool.maxClientRuntime).
 						Msg("stopping long running client")
 					stopAndLog(c, log)
 					numRemoved++
-				} else if c.IdleTime() > pool.MaxIdleTime {
+				} else if c.IdleTime() > pool.maxClientIdleTime {
 					log.Debug().Int("pid", c.ClientPid()).
 						Dur("runtime", rt).
 						Msg("stopping idle client")
@@ -259,7 +279,7 @@ func (pool *ClientPool) Return(client *Client) error {
 		return nil
 	}
 
-	if pool.size() < pool.maxClients {
+	if pool.size() < pool.maxSize {
 		pool.push(client)
 		log.Debug().Msgf("returned 1 client (running) to the pool making %d",
 			pool.size())
@@ -296,6 +316,7 @@ func (pool *ClientPool) Close() {
 	}
 }
 
+// size returns the number of clients currently available in the pool.
 func (pool *ClientPool) size() uint8 {
 	return uint8(len(pool.clients))
 }
@@ -304,6 +325,7 @@ func (pool *ClientPool) isEmpty() bool {
 	return pool.size() == 0
 }
 
+// pop returns the top client in the pool.
 func (pool *ClientPool) pop() (*Client, error) {
 	if pool.isEmpty() {
 		return nil, errPoolEmpty
@@ -315,6 +337,7 @@ func (pool *ClientPool) pop() (*Client, error) {
 	return top, nil
 }
 
+// push adds a client to the top of the client pool.
 func (pool *ClientPool) push(client *Client) {
 	pool.clients = append(pool.clients, client)
 }

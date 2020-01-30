@@ -30,13 +30,12 @@ import (
 	ex "github.com/kjsanger/extendo"
 )
 
-
 var _ = Describe("Make a client pool", func() {
 	var pool *ex.ClientPool
 
 	When("a pool is created", func() {
 		It("should be open", func() {
-			pool = ex.NewClientPool(10, time.Second)
+			pool = ex.NewClientPool(ex.DefaultClientPoolParams)
 			Expect(pool.IsOpen()).To(BeTrue())
 		})
 
@@ -54,7 +53,10 @@ var _ = Describe("Get clients from the pool", func() {
 	var clients []*ex.Client
 
 	BeforeEach(func() {
-		pool = ex.NewClientPool(poolSize, poolTimout)
+		params := ex.DefaultClientPoolParams
+		params.MaxSize = poolSize
+		params.GetTimeout = poolTimout
+		pool = ex.NewClientPool(params)
 	})
 
 	AfterEach(func() {
@@ -108,7 +110,10 @@ var _ = Describe("Return clients to the pool", func() {
 	var clients []*ex.Client
 
 	BeforeEach(func() {
-		pool = ex.NewClientPool(poolSize, poolTimout)
+		params := ex.DefaultClientPoolParams
+		params.MaxSize = poolSize
+		params.GetTimeout = poolTimout
+		pool = ex.NewClientPool(params)
 
 		var newClients []*ex.Client
 		for i := 0; i < int(poolSize); i++ {
@@ -171,38 +176,34 @@ var _ = Describe("Return clients to the pool", func() {
 	})
 })
 
-
 var _ = Describe("Pool client runtime timeout", func() {
 	var poolSize = uint8(10)
 	var poolTimout = time.Millisecond * 250
 	var pool *ex.ClientPool
 	var clients []*ex.Client
 
-	BeforeEach(func() {
-		pool = ex.NewClientPool(poolSize, poolTimout)
-		pool.CheckFreq = time.Millisecond * 500
-
-		var newClients []*ex.Client
-		for i := 0; i < int(poolSize); i++ {
-			c, err := pool.Get()
-			Expect(err).NotTo(HaveOccurred())
-			if err == nil {
-				newClients = append(newClients, c)
-			}
-		}
-
-		clients = newClients
-	})
-
 	AfterEach(func() {
 		pool.Close()
 	})
 
 	When("a pool is open", func() {
-		When("clients have run longer than MaxRuntime", func() {
+		When("clients have run longer than MaxClientRuntime", func() {
 			BeforeEach(func() {
-				pool.MaxRuntime = time.Millisecond * 500
-				pool.MaxIdleTime = time.Minute
+				params := ex.DefaultClientPoolParams
+				params.MaxSize = poolSize
+				params.GetTimeout = poolTimout
+				params.CheckClientFreq = time.Millisecond * 500
+				params.MaxClientRuntime = time.Millisecond * 500
+				params.MaxClientIdleTime = time.Minute
+				pool = ex.NewClientPool(params)
+
+				for i := 0; i < int(poolSize); i++ {
+					c, err := pool.Get()
+					Expect(err).NotTo(HaveOccurred())
+					if err == nil {
+						clients = append(clients, c)
+					}
+				}
 
 				for _, c := range clients {
 					err := pool.Return(c)
@@ -219,10 +220,23 @@ var _ = Describe("Pool client runtime timeout", func() {
 			})
 		})
 
-		When("clients have been idle longer than MaxIdleTime", func() {
+		When("clients have been idle longer than MaxClientIdleTime", func() {
 			BeforeEach(func() {
-				pool.MaxRuntime = time.Minute
-				pool.MaxIdleTime = time.Millisecond * 500
+				params := ex.DefaultClientPoolParams
+				params.MaxSize = poolSize
+				params.GetTimeout = poolTimout
+				params.CheckClientFreq = time.Millisecond * 500
+				params.MaxClientRuntime = time.Minute
+				params.MaxClientIdleTime = time.Millisecond * 500
+				pool = ex.NewClientPool(params)
+
+				for i := 0; i < int(poolSize); i++ {
+					c, err := pool.Get()
+					Expect(err).NotTo(HaveOccurred())
+					if err == nil {
+						clients = append(clients, c)
+					}
+				}
 
 				for _, c := range clients {
 					err := pool.Return(c)
