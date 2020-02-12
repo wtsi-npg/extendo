@@ -305,7 +305,6 @@ func (client *Client) Start(arg ...string) (*Client, error) {
 				return
 			case buf := <-pin:
 				n, werr := stdin.Write(append(buf, '\n'))
-
 				if werr != nil {
 					log.Error().Err(werr).
 						Str("executable", client.path).
@@ -476,9 +475,6 @@ func (client *Client) IsRunning() bool {
 // Chmod sets permissions on a collection or data object in iRODS. By setting
 // Args.Recurse=true, the operation may be made recursive.
 func (client *Client) Chmod(args Args, item RodsItem) (RodsItem, error) {
-	client.Lock()
-	defer client.Unlock()
-
 	items, err := client.execute(CHMOD, args, item)
 	if err != nil {
 		return item, err
@@ -492,9 +488,6 @@ func (client *Client) Chmod(args Args, item RodsItem) (RodsItem, error) {
 // on all replicates. If Args.Checksum=true is set, the new checksum will
 // be reported in the return value.
 func (client *Client) Checksum(args Args, item RodsItem) (RodsItem, error) {
-	client.Lock()
-	defer client.Unlock()
-
 	items, err := client.execute(CHECKSUM, args, item)
 	if err != nil {
 		return item, err
@@ -506,9 +499,6 @@ func (client *Client) Checksum(args Args, item RodsItem) (RodsItem, error) {
 // Get fetches a data object from iRODS. Fetching collections recursively is
 // not supported.
 func (client *Client) Get(args Args, item RodsItem) (RodsItem, error) {
-	client.Lock()
-	defer client.Unlock()
-
 	items, err := client.execute(GET, args, item)
 	if err != nil {
 		return item, err
@@ -530,9 +520,6 @@ func (client *Client) Get(args Args, item RodsItem) (RodsItem, error) {
 // Args.Timestamp = true  Include timestamps for data objects
 //
 func (client *Client) List(args Args, item RodsItem) ([]RodsItem, error) {
-	client.Lock()
-	defer client.Unlock()
-
 	if args.Recurse {
 		return client.listRecurse(args, item)
 	}
@@ -546,9 +533,6 @@ func (client *Client) List(args Args, item RodsItem) ([]RodsItem, error) {
 // returned. If the operation would return more than one collection or data
 // object, an error is returned.
 func (client *Client) ListItem(args Args, item RodsItem) (RodsItem, error) {
-	client.Lock()
-	defer client.Unlock()
-
 	if args.Recurse {
 		return item, errors.New("invalid argument: Recurse=true")
 	}
@@ -599,9 +583,6 @@ func (client *Client) metaMod(args Args, item RodsItem) (RodsItem, error) {
 // MetaAdd adds the AVUs of the item to a collection or data object in iRODS
 // and returns the item.
 func (client *Client) MetaAdd(args Args, item RodsItem) (RodsItem, error) {
-	client.Lock()
-	defer client.Unlock()
-
 	args.Operation = METAADD
 	return client.metaMod(args, item)
 }
@@ -609,17 +590,11 @@ func (client *Client) MetaAdd(args Args, item RodsItem) (RodsItem, error) {
 // MetaRem removes the AVUs of the item from a collection or data object in
 // iRODS and returns the item.
 func (client *Client) MetaRem(args Args, item RodsItem) (RodsItem, error) {
-	client.Lock()
-	defer client.Unlock()
-
 	args.Operation = METAREM
 	return client.metaMod(args, item)
 }
 
 func (client *Client) MetaQuery(args Args, item RodsItem) ([]RodsItem, error) {
-	client.Lock()
-	defer client.Unlock()
-
 	if !(args.Object || args.Collection) {
 		return nil, errors.Errorf("metaquery arguments must specify " +
 			"Object and/or Collection targets; neither were specified")
@@ -630,9 +605,6 @@ func (client *Client) MetaQuery(args Args, item RodsItem) ([]RodsItem, error) {
 
 // MkDir creates a new collection in iRODS and returns the item.
 func (client *Client) MkDir(args Args, item RodsItem) (RodsItem, error) {
-	client.Lock()
-	defer client.Unlock()
-
 	items, err := client.execute(MKDIR, args, item)
 	if err != nil {
 		return item, err
@@ -644,9 +616,6 @@ func (client *Client) MkDir(args Args, item RodsItem) (RodsItem, error) {
 // setting Args.Recurse=true, the operation may be made recursive on a
 // collection.
 func (client *Client) Put(args Args, item RodsItem) ([]RodsItem, error) {
-	client.Lock()
-	defer client.Unlock()
-
 	if args.Recurse {
 		return client.putRecurse(args, item)
 	}
@@ -656,17 +625,11 @@ func (client *Client) Put(args Args, item RodsItem) ([]RodsItem, error) {
 
 // RemObj removes a data object from iRODS and returns the item.
 func (client *Client) RemObj(args Args, item RodsItem) ([]RodsItem, error) {
-	client.Lock()
-	defer client.Unlock()
-
 	return client.execute(REMOVE, args, item)
 }
 
 // RemDir removes a collection from iRODS and returns the item.
 func (client *Client) RemDir(args Args, item RodsItem) ([]RodsItem, error) {
-	client.Lock()
-	defer client.Unlock()
-
 	return client.execute(RMDIR, args, item)
 }
 
@@ -778,8 +741,14 @@ func (client *Client) putRecurse(args Args, item RodsItem) ([]RodsItem, error) {
 	return newItems, nil
 }
 
+// execute sends JSON to a baton-do proecess, which in turn passes a request to
+// the iRODS server. This methdd handles the write locking while a call to the
+// iRODS server is being run.
 func (client *Client) execute(op string, args Args, item RodsItem) ([]RodsItem,
 	error) {
+	client.Lock()
+	defer client.Unlock()
+
 	if !client.isRunning {
 		return []RodsItem{}, errors.New("client is not running")
 	}
@@ -833,10 +802,14 @@ waitResponse:
 	return response, err
 }
 
+// wrap adds the JSON envelope to the iRODS operation. See the baton-do
+// documentation for details.
 func wrap(operation string, args Args, target RodsItem) *Envelope {
 	return &Envelope{Operation: operation, Arguments: args, Target: target}
 }
 
+// unwrap removes the envelope from JSON returned by baton-do and returns any
+// RodsItems or error from thre iRODS operation.
 func unwrap(client *Client, envelope *Envelope) ([]RodsItem, error) {
 	var items []RodsItem
 	if envelope.ErrorMsg != nil {
