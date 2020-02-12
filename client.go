@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019. Genome Research Ltd. All rights reserved.
+ * Copyright (C) 2019, 2020. Genome Research Ltd. All rights reserved.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -76,11 +76,16 @@ type Client struct {
 	in           chan []byte        // For sending to the sub-process.
 	out          chan []byte        // For receiving from the sub-process.
 	err          chan error         // For recording any sub-process error.
-	running      bool               // Flag indicating that the sub-process is running.
+	pid          int                // PID of the sub-process.
 	respTimeout  time.Duration      // Timeout for the sub-process to respond.
 	cancel       context.CancelFunc // For stopping the I/O goroutines.
 	inWaitGroup  *sync.WaitGroup    // WaitGroup for STDIN goroutine.
 	outWaitGroup *sync.WaitGroup    // WaitGroup for STDOUT/STDERR goroutines.
+	sync.RWMutex
+	isRunning    bool      // Flag indicating that the sub-process is running.
+	startTime    time.Time // Time at which the sub-process was started.
+	stopTime     time.Time // Time at which the sub-process completed.
+	activityTime time.Time // Time of the last activity. Updated by execute().
 }
 
 // Envelope is the JSON document accepted by baton-do, describing an operation
@@ -241,11 +246,14 @@ func NewClient(path string) (*Client, error) {
 // arguments to the baton program. If the program is already running and Start
 // is called, an error is raised.
 func (client *Client) Start(arg ...string) (*Client, error) {
-	log := logs.GetLogger()
+	client.Lock()
+	defer client.Unlock()
 
-	if client.IsRunning() {
+	if client.isRunning {
 		return client, errors.New("client is already running")
 	}
+
+	log := logs.GetLogger()
 
 	cmd := exec.Command(client.path, arg...)
 	stdin, err := cmd.StdinPipe()
@@ -278,10 +286,8 @@ func (client *Client) Start(arg ...string) (*Client, error) {
 	// I/O goroutine cancelling and cleanup
 	cancelCtx, cancel := context.WithCancel(context.Background())
 
-	var inWg sync.WaitGroup
+	var inWg, outWg sync.WaitGroup
 	inWg.Add(1)
-
-	var outWg sync.WaitGroup
 	outWg.Add(2) // The stdout, stderr goroutines
 
 	// Send messages to the baton sub-process
@@ -299,7 +305,6 @@ func (client *Client) Start(arg ...string) (*Client, error) {
 				return
 			case buf := <-pin:
 				n, werr := stdin.Write(append(buf, '\n'))
-
 				if werr != nil {
 					log.Error().Err(werr).
 						Str("executable", client.path).
@@ -371,16 +376,6 @@ func (client *Client) Start(arg ...string) (*Client, error) {
 		}
 	}(cancelCtx)
 
-	// Watch for baton sub-process completion and capture any error
-	go func() {
-		inWg.Wait()
-		outWg.Wait()
-		perr := cmd.Wait()
-
-		client.running = false
-		client.err <- perr
-	}()
-
 	client.cmd = cmd
 	client.stdin = stdin
 	client.stdout = stdout
@@ -388,11 +383,28 @@ func (client *Client) Start(arg ...string) (*Client, error) {
 	client.in = pin
 	client.out = pout
 	client.err = perr
-	client.running = true
+	client.pid = cmd.Process.Pid
+	client.isRunning = true
+	client.startTime = time.Now()
 	client.respTimeout = DefaultResponseTimeout
 	client.cancel = cancel
 	client.inWaitGroup = &inWg
 	client.outWaitGroup = &outWg
+
+	// Watch for baton sub-process completion and capture any error
+	go func() {
+		inWg.Wait()
+		outWg.Wait()
+		err := cmd.Wait()
+
+		client.Lock()
+		client.isRunning = false
+		client.stopTime = time.Now()
+		client.Unlock()
+
+		client.err <- err
+		close(client.err)
+	}()
 
 	return client, err
 }
@@ -405,15 +417,37 @@ func (client *Client) Stop() error {
 	return <-client.err
 }
 
+// IdleTime returns the duration for which the client has been idle (time
+// elapsed since the last request sent to the sub-process). If the client is no
+// longer, running returns the time since the client stopped.
+func (client *Client) IdleTime() time.Duration {
+	client.RLock()
+	defer client.RUnlock()
+
+	if client.isRunning {
+		return time.Since(client.activityTime)
+	}
+	return client.stopTime.Sub(client.activityTime)
+}
+
+// Runtime returns the duration for which the client has run. If the client is
+// running, it reports time spent so far. If the client has been stopped, it
+// reports the duration for which it ran.
+func (client *Client) Runtime() time.Duration {
+	client.RLock()
+	defer client.RUnlock()
+
+	if client.isRunning {
+		return time.Since(client.startTime)
+	}
+	return client.stopTime.Sub(client.startTime)
+}
+
 // Stop stops the baton sub-process, if it is running. Ignores any error
 // from the sub-process.
 func (client *Client) StopIgnoreError() {
-	if !client.IsRunning() {
-		return
-	}
-	pid := client.ClientPid()
 	if err := client.Stop(); err != nil {
-		logs.GetLogger().Error().Err(err).Int("pid", pid).
+		logs.GetLogger().Error().Err(err).Int("pid", client.pid).
 			Msg("stopped client")
 	}
 }
@@ -421,15 +455,21 @@ func (client *Client) StopIgnoreError() {
 // ClientPid returns the process ID of the baton sub-process if it has started,
 // or -1 otherwise.
 func (client *Client) ClientPid() int {
-	if client.IsRunning() {
-		return client.cmd.Process.Pid
+	client.RLock()
+	defer client.RUnlock()
+
+	if client.isRunning {
+		return client.pid
 	}
 	return -1
 }
 
 // IsRunning returns true if the client's baton sub-process is running.
 func (client *Client) IsRunning() bool {
-	return client.running
+	client.RLock()
+	defer client.RUnlock()
+
+	return client.isRunning
 }
 
 // Chmod sets permissions on a collection or data object in iRODS. By setting
@@ -701,11 +741,19 @@ func (client *Client) putRecurse(args Args, item RodsItem) ([]RodsItem, error) {
 	return newItems, nil
 }
 
+// execute sends JSON to a baton-do proecess, which in turn passes a request to
+// the iRODS server. This methdd handles the write locking while a call to the
+// iRODS server is being run.
 func (client *Client) execute(op string, args Args, item RodsItem) ([]RodsItem,
 	error) {
-	if !client.IsRunning() {
+	client.Lock()
+	defer client.Unlock()
+
+	if !client.isRunning {
 		return []RodsItem{}, errors.New("client is not running")
 	}
+
+	client.activityTime = time.Now()
 
 	response, err := client.send(wrap(op, args, item))
 	if err != nil {
@@ -738,7 +786,7 @@ waitResponse:
 		case <-time.After(client.respTimeout):
 			// If the sub-process is running we just wait again, until either
 			// it responds or stops running.
-			if !client.IsRunning() {
+			if !client.isRunning {
 				return nil, errors.New("receiving failed")
 			}
 			log.Debug().Str("executable", client.path).
@@ -754,10 +802,14 @@ waitResponse:
 	return response, err
 }
 
+// wrap adds the JSON envelope to the iRODS operation. See the baton-do
+// documentation for details.
 func wrap(operation string, args Args, target RodsItem) *Envelope {
 	return &Envelope{Operation: operation, Arguments: args, Target: target}
 }
 
+// unwrap removes the envelope from JSON returned by baton-do and returns any
+// RodsItems or error from thre iRODS operation.
 func unwrap(client *Client, envelope *Envelope) ([]RodsItem, error) {
 	var items []RodsItem
 	if envelope.ErrorMsg != nil {

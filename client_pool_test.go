@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019. Genome Research Ltd. All rights reserved.
+ * Copyright (C) 2019, 2020. Genome Research Ltd. All rights reserved.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,6 +21,7 @@
 package extendo_test
 
 import (
+	_ "net/http/pprof"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -34,7 +35,7 @@ var _ = Describe("Make a client pool", func() {
 
 	When("a pool is created", func() {
 		It("should be open", func() {
-			pool = ex.NewClientPool(10, time.Second)
+			pool = ex.NewClientPool(ex.DefaultClientPoolParams)
 			Expect(pool.IsOpen()).To(BeTrue())
 		})
 
@@ -52,7 +53,10 @@ var _ = Describe("Get clients from the pool", func() {
 	var clients []*ex.Client
 
 	BeforeEach(func() {
-		pool = ex.NewClientPool(poolSize, poolTimout)
+		params := ex.DefaultClientPoolParams
+		params.MaxSize = poolSize
+		params.GetTimeout = poolTimout
+		pool = ex.NewClientPool(params)
 	})
 
 	AfterEach(func() {
@@ -60,7 +64,7 @@ var _ = Describe("Get clients from the pool", func() {
 	})
 
 	When("a pool of size n is created", func() {
-		It("should supply n running clients before Get times out", func() {
+		It("Get should supply n running clients before timing out", func() {
 
 		loop:
 			for timeout := time.After(time.Second * 10); ; {
@@ -85,6 +89,18 @@ var _ = Describe("Get clients from the pool", func() {
 			}
 		})
 	})
+
+	When("a pool is closed", func() {
+		BeforeEach(func() {
+			pool.Close()
+		})
+
+		It("should not be possible to get clients from it", func() {
+			c, err := pool.Get()
+			Expect(c).To(BeNil())
+			Expect(err).To(HaveOccurred())
+		})
+	})
 })
 
 var _ = Describe("Return clients to the pool", func() {
@@ -94,7 +110,10 @@ var _ = Describe("Return clients to the pool", func() {
 	var clients []*ex.Client
 
 	BeforeEach(func() {
-		pool = ex.NewClientPool(poolSize, poolTimout)
+		params := ex.DefaultClientPoolParams
+		params.MaxSize = poolSize
+		params.GetTimeout = poolTimout
+		pool = ex.NewClientPool(params)
 
 		var newClients []*ex.Client
 		for i := 0; i < int(poolSize); i++ {
@@ -113,7 +132,7 @@ var _ = Describe("Return clients to the pool", func() {
 	})
 
 	When("a pool is open", func() {
-		It("should be possible to return the running clients", func() {
+		It("should be possible to return running clients to it", func() {
 			for _, c := range clients {
 				Expect(c.IsRunning()).To(BeTrue())
 
@@ -123,10 +142,18 @@ var _ = Describe("Return clients to the pool", func() {
 				Expect(c.IsRunning()).To(BeTrue())
 			}
 		})
+
+		It("should be possible to return stopped clients to it", func() {
+			for _, c := range clients {
+				c.StopIgnoreError()
+				err := pool.Return(c)
+				Expect(err).NotTo(HaveOccurred())
+			}
+		})
 	})
 
 	When("a pool is closed", func() {
-		It("should be possible to return the running clients", func() {
+		It("should be possible to return running clients to it", func() {
 			pool.Close()
 			for _, c := range clients {
 				Expect(c.IsRunning()).To(BeTrue())
@@ -136,6 +163,94 @@ var _ = Describe("Return clients to the pool", func() {
 
 				Expect(c.IsRunning()).To(BeFalse())
 			}
+		})
+
+		It("should be possible to return stopped clients to it", func() {
+			pool.Close()
+			for _, c := range clients {
+				c.StopIgnoreError()
+				err := pool.Return(c)
+				Expect(err).NotTo(HaveOccurred())
+			}
+		})
+	})
+})
+
+var _ = Describe("Pool client runtime timeout", func() {
+	var poolSize = uint8(10)
+	var poolTimout = time.Millisecond * 250
+	var pool *ex.ClientPool
+	var clients []*ex.Client
+
+	AfterEach(func() {
+		pool.Close()
+	})
+
+	When("a pool is open", func() {
+		When("clients have run longer than MaxClientRuntime", func() {
+			BeforeEach(func() {
+				params := ex.DefaultClientPoolParams
+				params.MaxSize = poolSize
+				params.GetTimeout = poolTimout
+				params.CheckClientFreq = time.Millisecond * 500
+				params.MaxClientRuntime = time.Millisecond * 500
+				params.MaxClientIdleTime = time.Minute
+				pool = ex.NewClientPool(params)
+
+				for i := 0; i < int(poolSize); i++ {
+					c, err := pool.Get()
+					Expect(err).NotTo(HaveOccurred())
+					if err == nil {
+						clients = append(clients, c)
+					}
+				}
+
+				for _, c := range clients {
+					err := pool.Return(c)
+					Expect(err).NotTo(HaveOccurred())
+				}
+			})
+
+			It("should stop those clients returned to it", func() {
+				time.Sleep(time.Second * 2)
+
+				for _, c := range clients {
+					Expect(c.IsRunning()).To(BeFalse())
+				}
+			})
+		})
+
+		When("clients have been idle longer than MaxClientIdleTime", func() {
+			BeforeEach(func() {
+				params := ex.DefaultClientPoolParams
+				params.MaxSize = poolSize
+				params.GetTimeout = poolTimout
+				params.CheckClientFreq = time.Millisecond * 500
+				params.MaxClientRuntime = time.Minute
+				params.MaxClientIdleTime = time.Millisecond * 500
+				pool = ex.NewClientPool(params)
+
+				for i := 0; i < int(poolSize); i++ {
+					c, err := pool.Get()
+					Expect(err).NotTo(HaveOccurred())
+					if err == nil {
+						clients = append(clients, c)
+					}
+				}
+
+				for _, c := range clients {
+					err := pool.Return(c)
+					Expect(err).NotTo(HaveOccurred())
+				}
+			})
+
+			It("should stop those clients returned to it", func() {
+				time.Sleep(time.Second * 2)
+
+				for _, c := range clients {
+					Expect(c.IsRunning()).To(BeFalse())
+				}
+			})
 		})
 	})
 })
