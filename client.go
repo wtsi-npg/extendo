@@ -81,7 +81,7 @@ type Client struct {
 	cancel       context.CancelFunc // For stopping the I/O goroutines.
 	inWaitGroup  *sync.WaitGroup    // WaitGroup for STDIN goroutine.
 	outWaitGroup *sync.WaitGroup    // WaitGroup for STDOUT/STDERR goroutines.
-	sync.Mutex
+	sync.RWMutex
 	isRunning    bool      // Flag indicating that the sub-process is running.
 	startTime    time.Time // Time at which the sub-process was started.
 	stopTime     time.Time // Time at which the sub-process completed.
@@ -277,7 +277,6 @@ func (client *Client) Start(arg ...string) (*Client, error) {
 	if err = cmd.Start(); err != nil {
 		return nil, err
 	}
-	pid := cmd.Process.Pid
 
 	// Sub-process input and response synchronisation
 	pin := make(chan []byte)
@@ -287,10 +286,8 @@ func (client *Client) Start(arg ...string) (*Client, error) {
 	// I/O goroutine cancelling and cleanup
 	cancelCtx, cancel := context.WithCancel(context.Background())
 
-	var inWg sync.WaitGroup
+	var inWg, outWg sync.WaitGroup
 	inWg.Add(1)
-
-	var outWg sync.WaitGroup
 	outWg.Add(2) // The stdout, stderr goroutines
 
 	// Send messages to the baton sub-process
@@ -380,22 +377,6 @@ func (client *Client) Start(arg ...string) (*Client, error) {
 		}
 	}(cancelCtx)
 
-	// Watch for baton sub-process completion and capture any error
-	go func(c *Client) {
-		inWg.Wait()
-		outWg.Wait()
-		perr := cmd.Wait()
-
-		// Lock to update these
-		c.Lock()
-		c.isRunning = false
-		c.stopTime = time.Now()
-		c.Unlock()
-
-		c.err <- perr
-		close(c.err)
-	}(client)
-
 	client.cmd = cmd
 	client.stdin = stdin
 	client.stdout = stdout
@@ -403,13 +384,28 @@ func (client *Client) Start(arg ...string) (*Client, error) {
 	client.in = pin
 	client.out = pout
 	client.err = perr
-	client.pid = pid
+	client.pid = cmd.Process.Pid
 	client.isRunning = true
 	client.startTime = time.Now()
 	client.respTimeout = DefaultResponseTimeout
 	client.cancel = cancel
 	client.inWaitGroup = &inWg
 	client.outWaitGroup = &outWg
+
+	// Watch for baton sub-process completion and capture any error
+	go func() {
+		inWg.Wait()
+		outWg.Wait()
+		err := cmd.Wait()
+
+		client.Lock()
+		client.isRunning = false
+		client.stopTime = time.Now()
+		client.Unlock()
+
+		client.err <- err
+		close(client.err)
+	}()
 
 	return client, err
 }
@@ -426,8 +422,8 @@ func (client *Client) Stop() error {
 // elapsed since the last request sent to the sub-process). If the client is no
 // longer, running returns the time since the client stopped.
 func (client *Client) IdleTime() time.Duration {
-	client.Lock()
-	defer client.Unlock()
+	client.RLock()
+	defer client.RUnlock()
 
 	if client.isRunning {
 		return time.Since(client.activityTime)
@@ -439,8 +435,8 @@ func (client *Client) IdleTime() time.Duration {
 // running, it reports time spent so far. If the client has been stopped, it
 // reports the duration for which it ran.
 func (client *Client) Runtime() time.Duration {
-	client.Lock()
-	defer client.Unlock()
+	client.RLock()
+	defer client.RUnlock()
 
 	if client.isRunning {
 		return time.Since(client.startTime)
@@ -460,6 +456,9 @@ func (client *Client) StopIgnoreError() {
 // ClientPid returns the process ID of the baton sub-process if it has started,
 // or -1 otherwise.
 func (client *Client) ClientPid() int {
+	client.RLock()
+	defer client.RUnlock()
+
 	if client.isRunning {
 		return client.pid
 	}
@@ -468,8 +467,8 @@ func (client *Client) ClientPid() int {
 
 // IsRunning returns true if the client's baton sub-process is running.
 func (client *Client) IsRunning() bool {
-	client.Lock()
-	defer client.Unlock()
+	client.RLock()
+	defer client.RUnlock()
 
 	return client.isRunning
 }
@@ -477,6 +476,9 @@ func (client *Client) IsRunning() bool {
 // Chmod sets permissions on a collection or data object in iRODS. By setting
 // Args.Recurse=true, the operation may be made recursive.
 func (client *Client) Chmod(args Args, item RodsItem) (RodsItem, error) {
+	client.Lock()
+	defer client.Unlock()
+
 	items, err := client.execute(CHMOD, args, item)
 	if err != nil {
 		return item, err
@@ -490,6 +492,9 @@ func (client *Client) Chmod(args Args, item RodsItem) (RodsItem, error) {
 // on all replicates. If Args.Checksum=true is set, the new checksum will
 // be reported in the return value.
 func (client *Client) Checksum(args Args, item RodsItem) (RodsItem, error) {
+	client.Lock()
+	defer client.Unlock()
+
 	items, err := client.execute(CHECKSUM, args, item)
 	if err != nil {
 		return item, err
@@ -501,6 +506,9 @@ func (client *Client) Checksum(args Args, item RodsItem) (RodsItem, error) {
 // Get fetches a data object from iRODS. Fetching collections recursively is
 // not supported.
 func (client *Client) Get(args Args, item RodsItem) (RodsItem, error) {
+	client.Lock()
+	defer client.Unlock()
+
 	items, err := client.execute(GET, args, item)
 	if err != nil {
 		return item, err
@@ -522,6 +530,9 @@ func (client *Client) Get(args Args, item RodsItem) (RodsItem, error) {
 // Args.Timestamp = true  Include timestamps for data objects
 //
 func (client *Client) List(args Args, item RodsItem) ([]RodsItem, error) {
+	client.Lock()
+	defer client.Unlock()
+
 	if args.Recurse {
 		return client.listRecurse(args, item)
 	}
@@ -535,6 +546,9 @@ func (client *Client) List(args Args, item RodsItem) ([]RodsItem, error) {
 // returned. If the operation would return more than one collection or data
 // object, an error is returned.
 func (client *Client) ListItem(args Args, item RodsItem) (RodsItem, error) {
+	client.Lock()
+	defer client.Unlock()
+
 	if args.Recurse {
 		return item, errors.New("invalid argument: Recurse=true")
 	}
@@ -585,6 +599,9 @@ func (client *Client) metaMod(args Args, item RodsItem) (RodsItem, error) {
 // MetaAdd adds the AVUs of the item to a collection or data object in iRODS
 // and returns the item.
 func (client *Client) MetaAdd(args Args, item RodsItem) (RodsItem, error) {
+	client.Lock()
+	defer client.Unlock()
+
 	args.Operation = METAADD
 	return client.metaMod(args, item)
 }
@@ -592,11 +609,17 @@ func (client *Client) MetaAdd(args Args, item RodsItem) (RodsItem, error) {
 // MetaRem removes the AVUs of the item from a collection or data object in
 // iRODS and returns the item.
 func (client *Client) MetaRem(args Args, item RodsItem) (RodsItem, error) {
+	client.Lock()
+	defer client.Unlock()
+
 	args.Operation = METAREM
 	return client.metaMod(args, item)
 }
 
 func (client *Client) MetaQuery(args Args, item RodsItem) ([]RodsItem, error) {
+	client.Lock()
+	defer client.Unlock()
+
 	if !(args.Object || args.Collection) {
 		return nil, errors.Errorf("metaquery arguments must specify " +
 			"Object and/or Collection targets; neither were specified")
@@ -607,6 +630,9 @@ func (client *Client) MetaQuery(args Args, item RodsItem) ([]RodsItem, error) {
 
 // MkDir creates a new collection in iRODS and returns the item.
 func (client *Client) MkDir(args Args, item RodsItem) (RodsItem, error) {
+	client.Lock()
+	defer client.Unlock()
+
 	items, err := client.execute(MKDIR, args, item)
 	if err != nil {
 		return item, err
@@ -618,6 +644,9 @@ func (client *Client) MkDir(args Args, item RodsItem) (RodsItem, error) {
 // setting Args.Recurse=true, the operation may be made recursive on a
 // collection.
 func (client *Client) Put(args Args, item RodsItem) ([]RodsItem, error) {
+	client.Lock()
+	defer client.Unlock()
+
 	if args.Recurse {
 		return client.putRecurse(args, item)
 	}
@@ -627,11 +656,17 @@ func (client *Client) Put(args Args, item RodsItem) ([]RodsItem, error) {
 
 // RemObj removes a data object from iRODS and returns the item.
 func (client *Client) RemObj(args Args, item RodsItem) ([]RodsItem, error) {
+	client.Lock()
+	defer client.Unlock()
+
 	return client.execute(REMOVE, args, item)
 }
 
 // RemDir removes a collection from iRODS and returns the item.
 func (client *Client) RemDir(args Args, item RodsItem) ([]RodsItem, error) {
+	client.Lock()
+	defer client.Unlock()
+
 	return client.execute(RMDIR, args, item)
 }
 
