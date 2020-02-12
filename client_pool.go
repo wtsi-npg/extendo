@@ -49,7 +49,7 @@ type ClientPool struct {
 	checkClientFreq   time.Duration // Frequency at which clients are checked.
 	maxClientIdleTime time.Duration // Idle time after which clients will be stopped.
 	maxClientRuntime  time.Duration // Runtime after which clients will be stopped.
-	sync.Mutex                      // Lock for IsOpen(), Get(), Return() and Close().
+	sync.RWMutex                    // Lock for IsOpen(), Get(), Return() and Close().
 	isOpen            bool          // True if the pool is open.
 	clients           []*Client     // Running clients in the pool.
 	numClients        uint8         // The number of clients created by the pool.
@@ -111,8 +111,8 @@ func NewClientPool(params ClientPoolParams, clientArgs ...string) *ClientPool {
 
 // IsOpen returns true if the pool is open.
 func (pool *ClientPool) IsOpen() bool {
-	pool.Lock()
-	defer pool.Unlock()
+	pool.RLock()
+	defer pool.RUnlock()
 
 	return pool.isOpen
 }
