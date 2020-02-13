@@ -83,7 +83,7 @@ func MakeCollection(client *Client, remotePath string) (*Collection, error) {
 	}
 
 	if !exists {
-		duration := time.Now().Sub(begin)
+		duration := time.Since(begin)
 		err = errors.Errorf("timed out after %d seconds waiting for "+
 			"collection '%s' to appear", uint64(duration.Seconds()), remotePath)
 	}

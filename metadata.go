@@ -154,7 +154,7 @@ func UniqAVUs(avus []AVU) []AVU {
 	}
 
 	var uniq []AVU
-	for avu, _ := range m {
+	for avu := range m {
 		uniq = append(uniq, avu)
 	}
 
