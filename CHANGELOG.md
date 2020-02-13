@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+### Changed
+
+### Fixed
+
+## [2.0.0] - 2020-02-13
+
+### Added
+
 - This changelog.
 - Support to stop idle and long-running clients.
 - IdleTime() and Runtime() to Client.
