@@ -27,7 +27,7 @@ import (
 	logs "github.com/kjsanger/logshim"
 	"github.com/pkg/errors"
 
-	"github.com/kjsanger/extendo/utilities"
+	"github.com/kjsanger/extendo/v2/utilities"
 )
 
 // ClientPool is a pool of iRODS Clients for use by applications. It provides

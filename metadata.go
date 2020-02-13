@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019. Genome Research Ltd. All rights reserved.
+ * Copyright (C) 2019, 2020. Genome Research Ltd. All rights reserved.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,7 +25,7 @@ import (
 	"os/user"
 	"time"
 
-	dcterms "github.com/kjsanger/extendo/dublincore"
+	dcterms "github.com/kjsanger/extendo/v2/dublincore"
 )
 
 const ChecksumAttr string = "md5"

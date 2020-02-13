@@ -21,13 +21,12 @@
 package extendo_test
 
 import (
-	_ "net/http/pprof"
 	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	ex "github.com/kjsanger/extendo"
+	ex "github.com/kjsanger/extendo/v2"
 )
 
 var _ = Describe("Make a client pool", func() {
