@@ -133,11 +133,14 @@ type Args struct {
 	Timestamp bool `json:"timestamp,omitempty"`
 }
 
+// ResultWrapper allows handling of both single results and lists of results in
+// JSON.
 type ResultWrapper struct {
 	Item *RodsItem   `json:"single,omitempty"`
 	List *[]RodsItem `json:"multiple,omitempty"`
 }
 
+// ErrMsg allows handling of an iRODS error message in JSON.
 type ErrorMsg struct {
 	Message string `json:"message"`
 	Code    int32  `json:"code"`
@@ -594,6 +597,11 @@ func (client *Client) MetaRem(args Args, item RodsItem) (RodsItem, error) {
 	return client.metaMod(args, item)
 }
 
+// MetaQuery runs a metadata search in iRODS. The query scope must be set in
+// Args by setting Args.Object = true (for data objects) and/or
+// Args.Collection = true (for collections). The iRODS zone for the query may
+// be set by providing a root iRODS path in the RodsItem to act as a zone hint.
+// e.g. RodsItem.IPath = "/seq".
 func (client *Client) MetaQuery(args Args, item RodsItem) ([]RodsItem, error) {
 	if !(args.Object || args.Collection) {
 		return nil, errors.Errorf("metaquery arguments must specify " +
