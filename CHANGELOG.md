@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   pool settings to be managed.
 - Switch from ClientPool from using channels to mutex.
 
+- Bump Miniconda3 from 4.5.11 to 4.6.14
+- Bump baton from 2.0.0 to 2.0.1
 - Bump github.com/rs/zerolog from 1.17.2 to 1.18.0
 - Bump github.com/pkg/errors from 0.8.1 to 0.9.1
 - Bump github.com/kjsanger/logshim from 1.0.0 to 1.1.0

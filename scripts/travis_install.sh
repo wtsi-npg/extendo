@@ -2,7 +2,7 @@
 
 set -e -u -x
 
-wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-4.5.11-Linux-x86_64.sh -O ~/miniconda.sh
+wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-4.6.14-Linux-x86_64.sh -O ~/miniconda.sh
 
 /bin/bash ~/miniconda.sh -b -p ~/miniconda
 ~/miniconda/bin/conda clean -tipsy
@@ -16,7 +16,7 @@ conda config --add channels https://dnap.cog.sanger.ac.uk/npg/conda/devel/generi
 conda create -y -n travis
 conda activate travis
 conda install -y irods-icommands
-conda install -y baton=2.0.0
+conda install -y baton=2.0.1
 
 mkdir -p ~/.irods
 cat <<EOF > ~/.irods/irods_environment.json
