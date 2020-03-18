@@ -208,6 +208,38 @@ var _ = Describe("Put a Collection into iRODS", func() {
 	})
 })
 
+var _ = Describe("Get the parent of a collection", func() {
+	var (
+		client *ex.Client
+		err    error
+	)
+
+	BeforeEach(func() {
+		client, err = ex.FindAndStart(batonArgs...)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	AfterEach(func() {
+		client.StopIgnoreError()
+	})
+
+	When("a collection is not the root", func() {
+		It("should have an appropriate parent", func() {
+			coll := ex.NewCollection(client, "/testZone/home/irods")
+			Expect(coll.Parent().RodsPath()).To(Equal("/testZone/home"))
+			Expect(coll.Parent().Parent().RodsPath()).To(Equal("/testZone"))
+			Expect(coll.Parent().Parent().Parent().RodsPath()).To(Equal("/"))
+		})
+	})
+
+	When("a collection is the root", func() {
+		It("should return itself as parent", func() {
+			coll := ex.NewCollection(client, "/")
+			Expect(coll.Parent().RodsPath()).To(Equal("/"))
+		})
+	})
+})
+
 var _ = Describe("Ensure that a Collection exists", func() {
 	var (
 		client *ex.Client

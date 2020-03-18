@@ -292,6 +292,29 @@ var _ = Describe("Archive a DataObject into iRODS", func() {
 	})
 })
 
+var _ = Describe("Get the parent of a data object", func() {
+	var (
+		client *ex.Client
+		err    error
+	)
+
+	BeforeEach(func() {
+		client, err = ex.FindAndStart(batonArgs...)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	AfterEach(func() {
+		client.StopIgnoreError()
+	})
+
+	When("a data object is present", func() {
+		It("should have its collection as its parent", func() {
+			obj := ex.NewDataObject(client, "/testZone/home/irods/dummy.txt")
+			Expect(obj.Parent().RodsPath()).To(Equal("/testZone/home/irods"))
+		})
+	})
+})
+
 var _ = Describe("Replace metadata on a DataObject", func() {
 	var (
 		client *ex.Client
