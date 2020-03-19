@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019. Genome Research Ltd. All rights reserved.
+ * Copyright (C) 2019, 2020. Genome Research Ltd. All rights reserved.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -132,6 +132,11 @@ func ArchiveDataObject(client *Client, localPath string, remotePath string,
 	err = obj.ReplaceMetadata(UniqAVUs(allAVUs))
 
 	return obj, err
+}
+
+// Parent returns a new Collection that is containing this data object.
+func (obj *DataObject) Parent() *Collection {
+	return NewCollection(obj.client, obj.IPath)
 }
 
 // Remove removes (deletes) the data object.
