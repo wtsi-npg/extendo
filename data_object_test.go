@@ -126,6 +126,29 @@ var _ = Describe("Report that a DataObject exists", func() {
 	})
 })
 
+var _ = Describe("Get the parent of a DataObject", func() {
+	var (
+		client *ex.Client
+		err    error
+	)
+
+	BeforeEach(func() {
+		client, err = ex.FindAndStart(batonArgs...)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	AfterEach(func() {
+		client.StopIgnoreError()
+	})
+
+	When("a data object is present", func() {
+		It("should have its collection as its parent", func() {
+			obj := ex.NewDataObject(client, "/testZone/home/irods/dummy.txt")
+			Expect(obj.Parent().RodsPath()).To(Equal("/testZone/home/irods"))
+		})
+	})
+})
+
 var _ = Describe("Put a DataObject into iRODS", func() {
 	var (
 		client *ex.Client
@@ -201,7 +224,7 @@ var _ = Describe("Archive a DataObject into iRODS", func() {
 		client.StopIgnoreError()
 	})
 
-	Context("archiving a data object", func() {
+	When("archiving a data object", func() {
 		When("it is a new data object", func() {
 			When("the expected checksum is matched", func() {
 				It("should be present in iRODS afterwards", func() {
@@ -259,8 +282,9 @@ var _ = Describe("Archive a DataObject into iRODS", func() {
 			It("should be present afterwards", func() {
 				creationMeta := ex.MakeCreationMetadata(newChecksum)
 				extraMeta := []ex.AVU{
-					ex.MakeAVU("x", "y"),
-					ex.MakeAVU("a", "b")}
+					{Attr: "x", Value: "y"},
+					{Attr: "a", Value: "b"},
+				}
 
 				obj, err := ex.ArchiveDataObject(client, newLocalPath,
 					remotePath, newChecksum, creationMeta, extraMeta)
@@ -275,7 +299,7 @@ var _ = Describe("Archive a DataObject into iRODS", func() {
 		})
 	})
 
-	Context("archiving a collection", func() {
+	When("archiving a collection", func() {
 		It("should fail to archive", func() {
 			dir := "testdata/1/reads/fast5/"
 			_, err := ex.ArchiveDataObject(client, dir, remotePath, "")
@@ -292,25 +316,185 @@ var _ = Describe("Archive a DataObject into iRODS", func() {
 	})
 })
 
-var _ = Describe("Get the parent of a data object", func() {
+var _ = Describe("Inspect metadata on an DataObject", func() {
 	var (
 		client *ex.Client
 		err    error
+
+		rootColl, workColl string
+
+		obj *ex.DataObject
+		avus []ex.AVU
 	)
 
 	BeforeEach(func() {
 		client, err = ex.FindAndStart(batonArgs...)
 		Expect(err).NotTo(HaveOccurred())
+
+		rootColl = "/testZone/home/irods"
+		workColl = tmpRodsPath(rootColl, "ExtendoDataObjectExists")
+
+		err = putTestData("testdata/", workColl)
+		Expect(err).NotTo(HaveOccurred())
+
+		remotePath := filepath.Join(workColl, "testdata/1/reads/fast5/reads1.fast5")
+		obj = ex.NewDataObject(client, remotePath)
 	})
 
 	AfterEach(func() {
+		err = removeTmpCollection(workColl)
+		Expect(err).NotTo(HaveOccurred())
+
 		client.StopIgnoreError()
 	})
 
-	When("a data object is present", func() {
-		It("should have its collection as its parent", func() {
-			obj := ex.NewDataObject(client, "/testZone/home/irods/dummy.txt")
-			Expect(obj.Parent().RodsPath()).To(Equal("/testZone/home/irods"))
+	Describe("Checking for a specific AVU (HasMetadatum)", func() {
+		When("the object does not have that AVU", func() {
+			It("should be false", func() {
+				Expect(obj.HasMetadatum(ex.AVU{Attr:"x", Value:"y"})).To(BeFalse())
+			})
+		})
+
+		When("the object has only that AVU", func() {
+			BeforeEach(func() {
+				avus = []ex.AVU{{Attr:"x", Value:"y"}}
+				err := obj.AddMetadata(avus)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should be true", func() {
+				Expect(obj.HasMetadatum(ex.AVU{Attr:"x", Value:"y"})).To(BeTrue())
+			})
+		})
+
+		When("the object has that, amongst other AVUs", func() {
+			BeforeEach(func() {
+				avus = []ex.AVU{
+					{Attr:"x", Value:"y"},
+					{Attr:"x", Value:"a"},
+					{Attr:"x", Value:"b"},
+					{Attr:"a", Value:"a"},
+					{Attr:"b", Value:"b"},
+				}
+				err := obj.AddMetadata(avus)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should be true", func() {
+				Expect(obj.HasMetadatum(ex.AVU{Attr:"x", Value:"y"})).To(BeTrue())
+			})
+		})
+	})
+
+	Describe("Checking for a subset of AVUs (HasSomeMetadata)", func() {
+		BeforeEach(func() {
+			avus = []ex.AVU{
+				{Attr:"x", Value:"y"},
+				{Attr:"x", Value:"a"},
+				{Attr:"a", Value:"a"},
+			}
+			err := obj.AddMetadata(avus)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		When("the object does not have any of the AVUs", func() {
+			It("should be false", func() {
+				Expect(obj.HasSomeMetadata([]ex.AVU{
+					{Attr:"z", Value:"y"},
+					{Attr:"z", Value:"a"},
+					{Attr:"w", Value:"a"},
+				})).To(BeFalse())
+			})
+		})
+
+		When("the object has some of the AVUs", func() {
+			It("should be true when the single query AVU is present", func() {
+				Expect(obj.HasSomeMetadata([]ex.AVU{
+					{Attr: "x", Value: "a"},
+				})).To(BeTrue())
+			})
+
+			It("should be true when all the query AVUs are present", func() {
+				Expect(obj.HasSomeMetadata([]ex.AVU{
+					{Attr: "x", Value: "a"},
+					{Attr: "a", Value: "a"},
+				})).To(BeTrue())
+			})
+
+			It("should be true when a subset of the query AVUs are present", func() {
+				Expect(obj.HasSomeMetadata([]ex.AVU{
+					{Attr: "x", Value: "a"},
+					{Attr: "g", Value: "h"},
+					{Attr: "i", Value: "j"},
+				})).To(BeTrue())
+			})
+		})
+
+		When("the object has none of the AVUs", func() {
+			It("should be false when a none of the query AVUs are present", func() {
+				Expect(obj.HasSomeMetadata([]ex.AVU{
+					{Attr:"r", Value:"s"},
+					{Attr:"t", Value:"u"},
+					{Attr:"v", Value:"w"},
+				})).To(BeFalse())
+			})
+		})
+	})
+
+	Describe("Checking for a set of AVUs (HasAllMetadata)", func() {
+		BeforeEach(func() {
+			avus = []ex.AVU{
+				{Attr:"x", Value:"y"},
+				{Attr:"x", Value:"a"},
+				{Attr:"a", Value:"a"},
+			}
+			err := obj.AddMetadata(avus)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		When("the object does not have any of the AVUs", func() {
+			It("should be false", func() {
+				Expect(obj.HasAllMetadata([]ex.AVU{
+					{Attr:"z", Value:"y"},
+					{Attr:"z", Value:"a"},
+					{Attr:"w", Value:"a"},
+				})).To(BeFalse())
+			})
+		})
+
+		When("the object has all the AVUs", func() {
+			It("should be true when the single query AVU is present", func() {
+				Expect(obj.HasAllMetadata([]ex.AVU{
+					{Attr: "x", Value: "a"},
+				})).To(BeTrue())
+			})
+
+			It("should be true when all the query AVUs are present", func() {
+				Expect(obj.HasAllMetadata([]ex.AVU{
+					{Attr: "x", Value: "a"},
+					{Attr: "a", Value: "a"},
+				})).To(BeTrue())
+			})
+		})
+
+		When("the object has some of the AVUs", func() {
+			It("should be false when a subset of the query AVUs are present", func() {
+				Expect(obj.HasAllMetadata([]ex.AVU{
+					{Attr: "x", Value: "a"},
+					{Attr: "g", Value: "h"},
+					{Attr: "i", Value: "j"},
+				})).To(BeFalse())
+			})
+		})
+
+		When("the object has none ofthe AVUs", func() {
+			It("should be false when a none of the query AVUs are present", func() {
+				Expect(obj.HasAllMetadata([]ex.AVU{
+					{Attr:"r", Value:"s"},
+					{Attr:"t", Value:"u"},
+					{Attr:"v", Value:"w"},
+				})).To(BeFalse())
+			})
 		})
 	})
 })
@@ -333,7 +517,7 @@ var _ = Describe("Replace metadata on a DataObject", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		rootColl = "/testZone/home/irods"
-		workColl = tmpRodsPath(rootColl, "ExtendoReplace")
+		workColl = tmpRodsPath(rootColl, "ExtendoMetadataReplace")
 
 		err = putTestData("testdata/", workColl)
 		Expect(err).NotTo(HaveOccurred())
@@ -348,16 +532,16 @@ var _ = Describe("Replace metadata on a DataObject", func() {
 		client.StopIgnoreError()
 	})
 
-	Context("replacing metadata on data objects", func() {
+	When("replacing metadata on data objects", func() {
 		BeforeEach(func() {
 			obj = ex.NewDataObject(client, remotePath)
 
-			avuA0 = ex.MakeAVU("a", "0", "z")
-			avuA1 = ex.MakeAVU("a", "1")
-			avuA2 = ex.MakeAVU("a", "2", "z")
+			avuA0 = ex.AVU{Attr: "a", Value: "0", Units: "z"}
+			avuA1 = ex.AVU{Attr: "a", Value: "1"}
+			avuA2 = ex.AVU{Attr: "a", Value: "2", Units: "z"}
 
-			avuB0 = ex.MakeAVU("b", "0", "z")
-			avuB1 = ex.MakeAVU("b", "1", "z")
+			avuB0 = ex.AVU{Attr: "b", Value: "0", Units: "z"}
+			avuB1 = ex.AVU{Attr: "b", Value: "1", Units: "z"}
 
 			err = obj.AddMetadata([]ex.AVU{avuA0, avuA1, avuA2, avuB0, avuB1})
 			Expect(err).NotTo(HaveOccurred())
@@ -365,7 +549,7 @@ var _ = Describe("Replace metadata on a DataObject", func() {
 
 		When("it shares attributes with existing metadata", func() {
 			It("should be added", func() {
-				newAVU := ex.MakeAVU("a", "nvalue", "nunits")
+				newAVU := ex.AVU{Attr:"a", Value: "nvalue",Units: "nunits"}
 
 				err := obj.ReplaceMetadata([]ex.AVU{newAVU})
 				Expect(err).NotTo(HaveOccurred())
@@ -375,3 +559,4 @@ var _ = Describe("Replace metadata on a DataObject", func() {
 		})
 	})
 })
+

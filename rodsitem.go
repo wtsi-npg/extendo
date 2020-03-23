@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019. Genome Research Ltd. All rights reserved.
+ * Copyright (C) 2019, 2020. Genome Research Ltd. All rights reserved.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -32,7 +32,7 @@ import (
 // the JSON document used by baton and the extendo wrapper and its purpose is to
 // enable extendo to communicate with baton. Extendo includes a higher level API
 // having distinct types for data objects and collections which should be used
-// in preference to RodsItem.
+// in preference to RodsItem. A RodsItem is not safe for concurrent use.
 type RodsItem struct {
 	client *Client
 	// Local file name
@@ -169,10 +169,57 @@ func (item *RodsItem) AddACLs(acls []ACL) error {
 	return err
 }
 
+// Metadata returns the RodsItem AVUs. It does not fetch AVUs from the server.
+// See FetchMetadata().
 func (item *RodsItem) Metadata() []AVU {
 	return item.IAVUs
 }
 
+// HasAVU returns true if the RodsItem has the argument AVU in its metadata.
+func (item *RodsItem) HasMetadatum(avu AVU) bool {
+	for _, a := range item.IAVUs {
+		if a == avu {
+			return true
+		}
+	}
+	return false
+}
+
+// HasSomeMetadata returns true if the RodsItem has at has at least one of the
+// argument AVUs in its metadata.
+func (item *RodsItem) HasSomeMetadata(avus []AVU) bool {
+	lookup := make(map[AVU]bool)
+	for _, avu := range item.IAVUs {
+		lookup[avu] = true
+	}
+
+	for _, avu := range avus {
+		if lookup[avu] {
+			return true
+		}
+	}
+
+	return false
+}
+
+// HasAllMetadata returns true if the RodsItem has at has every one of the
+// argument AVUs in its metadata.
+func (item *RodsItem) HasAllMetadata(avus []AVU) bool {
+	lookup := make(map[AVU]bool)
+	for _, avu := range item.IAVUs {
+		lookup[avu] = true
+	}
+
+	for _, avu := range avus {
+		if !lookup[avu] {
+			return false
+		}
+	}
+
+	return true
+}
+
+// FetchMetadata fetches and returns any metadata AVUs on the RodsItem.
 func (item *RodsItem) FetchMetadata() ([]AVU, error) {
 	it, err := item.client.ListItem(Args{AVU: true}, *item)
 	if err != nil {
@@ -183,31 +230,52 @@ func (item *RodsItem) FetchMetadata() ([]AVU, error) {
 	return item.IAVUs, err
 }
 
+// AddMetadata adds each argument AVU to the RodsItem, in the order that they
+// are supplied. The add operation is idempotent (adding an AVU that is already
+// present does return an error).
 func (item *RodsItem) AddMetadata(avus []AVU) error {
-	it := CopyRodsItem(*item)
-	it.IAVUs = avus
-
-	if _, err := item.client.MetaAdd(Args{}, it); err != nil {
+	currentAVUs, err := item.FetchMetadata()
+	if err != nil {
 		return err
 	}
 
-	_, err := item.FetchMetadata()
+	toAdd := SetDiffAVUs(avus, currentAVUs)
+	if len(toAdd) > 0 {
+		it := CopyRodsItem(*item)
+		it.IAVUs = toAdd
+		if _, err := item.client.MetaAdd(Args{}, it); err != nil {
+			return err
+		}
+
+		item.IAVUs = SetUnionAVUs(currentAVUs, toAdd)
+	}
+
 	return err
 }
 
+// RemoveMetadata removes each argument AVU from the RodsItem, in the order
+// that they are supplied. The remove operation is idempotent (removing an AVU
+// that is not present does not return an error).
 func (item *RodsItem) RemoveMetadata(avus []AVU) error {
+	currentAVUs, err := item.FetchMetadata()
+	if err != nil {
+		return err
+	}
+
 	it := CopyRodsItem(*item)
 	it.IAVUs = avus
 	if _, err := item.client.MetaRem(Args{}, it); err != nil {
 		return err
 	}
 
-	_, err := item.FetchMetadata()
+	item.IAVUs = SetDiffAVUs(currentAVUs, avus)
+
 	return err
 }
 
-// ReplaceMetadata removes from a RodsItem any existing AVUs sharing an attribute
-// with the argument AVUs and then adds to the RodsItem the argument AVUs.
+// ReplaceMetadata removes from a RodsItem any existing AVUs sharing an
+// attribute with the argument AVUs and then adds to the RodsItem the argument
+// AVUs.
 func (item *RodsItem) ReplaceMetadata(avus []AVU) error {
 
 	// Attributes whose AVUs are to be replaced
@@ -338,9 +406,9 @@ func SortACLs(acls []ACL) {
 
 // AVU is an iRODS attribute, value, units triple.
 type AVU struct {
-	Attr     string `json:"attribute"`
-	Value    string `json:"value"`
-	Units    string `json:"units,omitempty"`
+	Attr     string `json:"attribute"`       // iRODS attribute name
+	Value    string `json:"value"`           // iRODS attribute value
+	Units    string `json:"units,omitempty"` // iRODS attribute units
 	Operator string `json:"operator,omitempty"`
 }
 
