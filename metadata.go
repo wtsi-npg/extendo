@@ -32,6 +32,7 @@ const ChecksumAttr string = "md5"
 
 type AVUFilter func(avu AVU) bool
 
+// MakeAVU returns a new AVU instance.
 func MakeAVU(attr string, value string, units ...string) AVU {
 	var unit string
 	if len(units) > 0 {
@@ -41,6 +42,16 @@ func MakeAVU(attr string, value string, units ...string) AVU {
 	return AVU{Attr: attr, Value: value, Units: unit}
 }
 
+// MakeCreationMetadata returns the standard metadata to be added to a newly
+// created data object. The AVUs describe:
+//
+// - Who (which organisation) was responsible for creation of the data object
+// - Who (which user) published (wrote) the data object.
+// - What the checksum of the new data object was at the time of creation.
+// - When the data object was created.
+//
+// These are expressed (with the exception of the checksum) as Dublin Core
+// metadata https://www.dublincore.org/specifications/dublin-core/dcmi-terms/
 func MakeCreationMetadata(checksum string) []AVU {
 	when := time.Now().Format(time.RFC3339)
 	who, err := user.Current()
