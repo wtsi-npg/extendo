@@ -12,6 +12,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+## [2.1.0] - 2020-03-24
+
+### Added
+
+- HasMetadatum, HasSomeMetadata and HasAllMetadata methods to RodsItem.
+- Parent method to Collection and DataObject.
+- Test on Go 1.14
+
+### Changed
+
+- AddMetadata and RemoveMetadata are now idempotent.
+
+- Bump github.com/stretchr/testify from 1.4.0 to 1.5.1
+
+### Fixed
+
 ## [2.0.0] - 2020-02-13
 
 ### Added
@@ -26,7 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Modify NewClientPool to accept ClientPoolParams. This is an API breaking
   change as it modifies the signature of NewClientPool to allow a number of
   pool settings to be managed.
-- Switch from ClientPool from using channels to mutex.
+- Switch ClientPool from using channels to mutex.
 
 - Bump Miniconda3 from 4.5.11 to 4.6.14
 - Bump baton from 2.0.0 to 2.0.1
