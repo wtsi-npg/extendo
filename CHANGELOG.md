@@ -8,7 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added HasNamespace, Namespace, WithNamespace, WithoutNamespace
+  methods to AVU.
+
 ### Changed
+
+- Deprecated MakeAVU.
+
+- Bump github.com/stretchr/testify from 1.5.1 to 1.6.1
+- Bump github.com/onsi/ginkgo from 1.12.0 to 1.12.2
+- Bump github.com/rs/zerolog from 1.18.0 to 1.19.0
 
 ### Fixed
 
@@ -34,7 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - This changelog.
 - Support to stop idle and long-running clients.
-- IdleTime() and Runtime() to Client.
+- IdleTime and Runtime methods to Client.
 - Locking to Client for state updates and iRODS operations.
 
 ### Changed
