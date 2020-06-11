@@ -33,6 +33,8 @@ const ChecksumAttr string = "md5"
 type AVUFilter func(avu AVU) bool
 
 // MakeAVU returns a new AVU instance.
+//
+// Deprecated: Make structs using named fields, as normal.
 func MakeAVU(attr string, value string, units ...string) AVU {
 	var unit string
 	if len(units) > 0 {
@@ -63,10 +65,10 @@ func MakeCreationMetadata(checksum string) []AVU {
 		"ou=people,dc=sanger,dc=ac,dc=uk?title?sub?(uid=%s)", who.Name)
 
 	return []AVU{
-		MakeAVU(dcterms.Created, when),
-		MakeAVU(dcterms.Creator, "http://www.sanger.ac.uk"),
-		MakeAVU(dcterms.Publisher, publisher),
-		MakeAVU(ChecksumAttr, checksum),
+		{Attr: dcterms.Created, Value: when},
+		{Attr: dcterms.Creator, Value: "http://www.sanger.ac.uk"},
+		{Attr: dcterms.Publisher, Value: publisher},
+		{Attr: ChecksumAttr, Value: checksum},
 	}
 }
 

@@ -23,6 +23,7 @@ package extendo
 import (
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	logs "github.com/kjsanger/logshim"
@@ -410,6 +411,43 @@ type AVU struct {
 	Value    string `json:"value"`           // iRODS attribute value
 	Units    string `json:"units,omitempty"` // iRODS attribute units
 	Operator string `json:"operator,omitempty"`
+}
+
+// HasNamespace returns true if the AVU attribute has a colon-separated
+// namespace.
+func (avu AVU) HasNamespace() bool {
+	return strings.Index(avu.Attr, ":") > 0
+}
+
+// Namespace returns the namespace string of the AVU attribute, or an
+// empty string if there is no namespace.
+func (avu AVU) Namespace() string {
+	if avu.HasNamespace() {
+		return strings.Split(avu.Attr, ":")[0]
+	}
+	return ""
+}
+
+// WithNamespace returns an AVU with the attribute namespace set.
+func (avu AVU) WithNamespace(namespace string) AVU {
+	nsPrefix := namespace + ":"
+
+	nsAvu := avu
+	if !strings.HasPrefix(nsAvu.Attr, nsPrefix) {
+		nsAvu.Attr = nsPrefix + nsAvu.Attr
+	}
+	return nsAvu
+}
+
+// WithoutNamespace returns the attribute of the AVU without any namespace,
+// if one is present. If there is no namespace, the AVU attribute is
+// returned.
+func (avu AVU) WithoutNamespace() string {
+	if avu.HasNamespace() {
+		return strings.Split(avu.Attr, ":")[1]
+	}
+
+	return avu.Attr
 }
 
 // SortAVUs sorts avus by Attr, then Value and finally, Units.

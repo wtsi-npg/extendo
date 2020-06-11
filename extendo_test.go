@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019. Genome Research Ltd. All rights reserved.
+ * Copyright (C) 2019, 2020 Genome Research Ltd. All rights reserved.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -125,9 +125,9 @@ func TestIsDataObject(t *testing.T) {
 }
 
 func TestSearchAVU(t *testing.T) {
-	avu0 := MakeAVU("x", "y", "z")
-	avu1 := MakeAVU("a", "b", "z")
-	avu2 := MakeAVU("w", "x", "z")
+	avu0 := AVU{Attr: "x", Value: "y", Units: "z"}
+	avu1 := AVU{Attr: "a", Value: "b", Units: "z"}
+	avu2 := AVU{Attr: "w", Value: "x", Units: "z"}
 
 	// Unsorted array (will fail test unless sorted before the binary search)
 	avus := []AVU{avu0, avu1, avu2}
@@ -140,15 +140,15 @@ func TestSearchAVU(t *testing.T) {
 	assert.True(t, SearchAVU(avu2, avus),
 		"%v was not found in", avu2, avus)
 
-	assert.False(t, SearchAVU(MakeAVU("f", "g"), avus))
+	assert.False(t, SearchAVU(AVU{Attr: "f", Value: "g"}, avus))
 }
 
 func TestSetIntersectAVUs(t *testing.T) {
-	avu0 := MakeAVU("x", "y", "z")
-	avu1 := MakeAVU("a", "b", "z")
-	avu2 := MakeAVU("w", "x", "z")
-	avu3 := MakeAVU("1", "2", "3")
-	avu4 := MakeAVU("4", "5", "6")
+	avu0 := AVU{Attr: "x", Value: "y", Units: "z"}
+	avu1 := AVU{Attr: "a", Value: "b", Units: "z"}
+	avu2 := AVU{Attr: "w", Value: "x", Units: "z"}
+	avu3 := AVU{Attr: "1", Value: "2", Units: "3"}
+	avu4 := AVU{Attr: "4", Value: "5", Units: "6"}
 
 	avusX := []AVU{avu0, avu1, avu2, avu3}
 	avusY := []AVU{avu4, avu3, avu2}
@@ -162,11 +162,11 @@ func TestSetIntersectAVUs(t *testing.T) {
 }
 
 func TestSetUnionAVUs(t *testing.T) {
-	avu0 := MakeAVU("x", "y", "z")
-	avu1 := MakeAVU("a", "b", "z")
-	avu2 := MakeAVU("w", "x", "z")
-	avu3 := MakeAVU("1", "2", "3")
-	avu4 := MakeAVU("4", "5", "6")
+	avu0 := AVU{Attr: "x", Value: "y", Units: "z"}
+	avu1 := AVU{Attr: "a", Value: "b", Units: "z"}
+	avu2 := AVU{Attr: "w", Value: "x", Units: "z"}
+	avu3 := AVU{Attr: "1", Value: "2", Units: "3"}
+	avu4 := AVU{Attr: "4", Value: "5", Units: "6"}
 
 	avusX := []AVU{avu0, avu1, avu2, avu3}
 	avusY := []AVU{avu4, avu3, avu2}
@@ -180,9 +180,9 @@ func TestSetUnionAVUs(t *testing.T) {
 }
 
 func TestUniqAVUs(t *testing.T) {
-	avu0 := MakeAVU("x", "y", "z")
-	avu1 := MakeAVU("a", "b", "z")
-	avu2 := MakeAVU("w", "x", "z")
+	avu0 := AVU{Attr: "x", Value: "y", Units: "z"}
+	avu1 := AVU{Attr: "a", Value: "b", Units: "z"}
+	avu2 := AVU{Attr: "w", Value: "x", Units: "z"}
 
 	avus := []AVU{avu1, avu2, avu0, avu0, avu1, avu0, avu1}
 
@@ -190,4 +190,36 @@ func TestUniqAVUs(t *testing.T) {
 	SortAVUs(expected)
 
 	assert.Equal(t, UniqAVUs(avus), expected)
+}
+
+func TestAVU_HasNamespace(t *testing.T) {
+	assert.False(t, AVU{Attr:"x",Value: "y"}.HasNamespace())
+	assert.False(t, AVU{Attr:":x", Value:"y"}.HasNamespace())
+	assert.True(t, AVU{Attr:"a:x", Value: "y"}.HasNamespace())
+	assert.True(t, AVU{Attr:"aa:x",Value: "y"}.HasNamespace())
+}
+
+func TestAVU_SetNamespace(t *testing.T) {
+	ns := "a"
+
+	avu := AVU{Attr: "x", Value: "y", Units: "z"}.WithNamespace(ns)
+	assert.True(t, avu.HasNamespace())
+	assert.Equal(t, ns, avu.Namespace())
+}
+
+func TestAVU_Namespace(t *testing.T) {
+	avu0 := AVU{Attr:"a:x", Value: "y", Units: "z"}
+	assert.Equal(t, avu0.Namespace(), "a")
+
+	avu1 := AVU{Attr: "x", Value: "y", Units: "z"}
+	assert.Equal(t, "", avu1.Namespace())
+}
+
+func TestAVU_NamespacedAttr(t *testing.T) {
+	avu0 := AVU{Attr: "a:x", Value: "y", Units: "z"}
+	assert.True(t, avu0.HasNamespace())
+	assert.Equal(t, "x", avu0.WithoutNamespace())
+
+	avu1 := AVU{Attr: "x", Value: "y", Units: "z"}
+	assert.Equal(t, "x", avu1.WithoutNamespace())
 }
