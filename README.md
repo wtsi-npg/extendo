@@ -14,7 +14,7 @@ therefore baton is required for its operation.
 
 #### Status
 
-[![Build Status](https://travis-ci.org/kjsanger/extendo.svg?branch=devel)](https://travis-ci.org/kjsanger/extendo)
+[![Build Status](https://travis-ci.org/wtsi-npg/extendo.svg?branch=devel)](https://travis-ci.org/wtsi-npg/extendo)
 
 #### Dependencies:
 

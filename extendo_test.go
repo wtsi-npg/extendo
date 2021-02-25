@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019, 2020 Genome Research Ltd. All rights reserved.
+ * Copyright (C) 2019, 2020, 2021 Genome Research Ltd. All rights reserved.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,10 +25,10 @@ import (
 	"testing"
 	"time"
 
-	logs "github.com/kjsanger/logshim"
-	"github.com/kjsanger/logshim-zerolog/zlog"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
+	logs "github.com/wtsi-npg/logshim"
+	"github.com/wtsi-npg/logshim-zerolog/zlog"
 )
 
 // These are whitebox Unit tests with access to extendo package internals.
