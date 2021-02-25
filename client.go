@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019, 2020. Genome Research Ltd. All rights reserved.
+ * Copyright (C) 2019, 2020, 2021. Genome Research Ltd. All rights reserved.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -35,8 +35,8 @@ import (
 	"syscall"
 	"time"
 
-	logs "github.com/kjsanger/logshim"
 	"github.com/pkg/errors"
+	logs "github.com/wtsi-npg/logshim"
 )
 
 const (
@@ -817,7 +817,7 @@ func wrap(operation string, args Args, target RodsItem) *Envelope {
 }
 
 // unwrap removes the envelope from JSON returned by baton-do and returns any
-// RodsItems or error from thre iRODS operation.
+// RodsItems or error from the iRODS operation.
 func unwrap(client *Client, envelope *Envelope) ([]RodsItem, error) {
 	var items []RodsItem
 	if envelope.ErrorMsg != nil {

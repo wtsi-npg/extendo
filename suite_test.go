@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019. Genome Research Ltd. All rights reserved.
+ * Copyright (C) 2019, 2021. Genome Research Ltd. All rights reserved.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,11 +25,11 @@ import (
 	"testing"
 	"time"
 
-	logs "github.com/kjsanger/logshim"
-	"github.com/kjsanger/logshim-zerolog/zlog"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/rs/zerolog"
+	logs "github.com/wtsi-npg/logshim"
+	"github.com/wtsi-npg/logshim-zerolog/zlog"
 )
 
 // Define the Extendo test suite. The tests themselves are defined in separate

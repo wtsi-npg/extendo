@@ -25,7 +25,7 @@ import (
 	"os/user"
 	"time"
 
-	dcterms "github.com/kjsanger/extendo/v2/dublincore"
+	dcterms "github.com/wtsi-npg/extendo/v2/dublincore"
 )
 
 const ChecksumAttr string = "md5"
