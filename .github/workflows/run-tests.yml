@@ -48,6 +48,9 @@ jobs:
 
     - name: "Configure Miniconda"
       run: |
+        conda config --prepend pkgs_dirs "$HOME/conda/pkgs"
+        conda config --prepend envs_dirs "$HOME/conda/envs"
+
         conda config --set auto_update_conda False
         conda config --prepend channels "$WSI_CONDA_CHANNEL"
         conda config --append channels conda-forge
@@ -74,12 +77,22 @@ jobs:
             "irods_default_resource": "testResc"
         }
         EOF
-        echo "irods" | script -q -c "iinit" /dev/null
 
+        echo "irods" | script -q -c "iinit" /dev/null
         ienv
         ils
 
         baton-do --version
+
+    - name: "Cache Go modules"
+      uses: actions/cache@v2
+      with:
+        path: |
+          "$HOME/go/pkg/mod"
+          "$HOME/.cache/go-build"
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
 
     - name: "Install test runner"
       run: |
