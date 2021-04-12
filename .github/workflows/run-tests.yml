@@ -5,26 +5,34 @@ on: [push, pull_request]
 jobs:
   build:
     runs-on: ubuntu-18.04
+    continue-on-error: ${{ matrix.experimental }} # Experimental builds may fail
+
     defaults:
       run:
         shell: bash -l -e -o pipefail {0}
 
-    strategy:
-      matrix:
-        go: [ "1.16" ]
-#        irods: [ "4.2.7", "4.2.8" ]
-
-    services:
-      irods:
-        image: wsinpg/ub-16.04-irods-4.2.7:latest
-        ports:
-          - 1247:1247
-
     env:
       WSI_CONDA_CHANNEL: "https://dnap.cog.sanger.ac.uk/npg/conda/devel/generic"
       CONDA_TEST_ENVIRONMENT: "testenv"
-      IRODS_VERSION: "4.2.7"
-      BATON_VERSION: "2.0.1"
+
+    strategy:
+      matrix:
+        go: [ "1.16" ]
+        baton: [ "2.1.0" ]
+        experimental: [false]
+        include:
+          - irods: "4.2.7"
+            server_image: "wsinpg/ub-16.04-irods-4.2.7:latest"
+            experimental: false
+          - irods: "4.2.8"
+            server_image: "wsinpg/ub-18.04-irods-4.2.8:latest"
+            experimental: true
+
+    services:
+      irods:
+        image: ${{ matrix.server_image }}
+        ports:
+          - 1247:1247
 
     steps:
     - uses: actions/checkout@v2
@@ -37,7 +45,6 @@ jobs:
     - name: "Initialize Miniconda"
       run: |
         echo 'source $CONDA/etc/profile.d/conda.sh' >> "$HOME/.bash_profile"
-        conda init -v bash
 
     - name: "Configure Miniconda"
       run: |
@@ -49,8 +56,8 @@ jobs:
     - name: "Install iRODS clients"
       run: |
         conda create -y -n "$CONDA_TEST_ENVIRONMENT"
-        conda install -y -n "$CONDA_TEST_ENVIRONMENT" "irods-icommands ==$IRODS_VERSION"
-        conda install -y -n "$CONDA_TEST_ENVIRONMENT" "baton >$BATON_VERSION"
+        conda install -y -n "$CONDA_TEST_ENVIRONMENT" "irods-icommands ==${{ matrix.irods }}"
+        conda install -y -n "$CONDA_TEST_ENVIRONMENT" "baton ==${{ matrix.baton }}"
 
     - name: "Configure iRODS clients"
       run: |
