@@ -14,7 +14,7 @@ therefore baton is required for its operation.
 
 #### Status
 
-[![Build Status](https://travis-ci.com/wtsi-npg/extendo.svg?branch=devel)](https://travis-ci.com/wtsi-npg/extendo)
+[![Unit tests](https://github.com/wtsi-npg/extendo/actions/workflows/run-tests.yml/badge.svg)](https://github.com/wtsi-npg/extendo/actions/workflows/run-tests.yml)
 
 #### Dependencies:
 
