@@ -8,7 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added a Github Actions test workflow
+
 ### Changed
+
+- Bump github.com/onsi/ginkgo from 1.15.0 to 1.16.1
+- Bump github.com/onsi/gomega from 1.10.5 to 1.11.0
+- Bump github.com/pkg/errors from 0.8.1 to 0.9.1
+- Bump github.com/rs/zerolog from 1.19.0 to 1.21.0
+- Bump github.com/wtsi-npg/logshim from 1.2.0 to 1.3.0
+- Bump github.com/wtsi-npg/logshim-zerolog 1.2.0 to 1.3.0
 
 ## [2.3.0] - 2021-02-25
 
