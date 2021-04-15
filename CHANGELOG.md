@@ -4,13 +4,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - [![Build Status](https://travis-ci.org/kjsanger/extendo.svg?branch=devel)](https://travis-ci.org/kjsanger/extendo)
+## [Unreleased] - [![Unit tests](https://github.com/wtsi-npg/extendo/actions/workflows/run-tests.yml/badge.svg)](https://github.com/wtsi-npg/extendo/actions/workflows/run-tests.yml)
 
 ### Added
 
+### Changed
+
+## [2.4.0] - 2021-04-15
+
+### Added
+
+- Added a Github Actions test workflow
 
 ### Changed
 
+- Bump github.com/onsi/ginkgo from 1.15.0 to 1.16.1
+- Bump github.com/onsi/gomega from 1.10.5 to 1.11.0
+- Bump github.com/pkg/errors from 0.8.1 to 0.9.1
+- Bump github.com/rs/zerolog from 1.19.0 to 1.21.0
+- Bump github.com/wtsi-npg/logshim from 1.2.0 to 1.3.0
+- Bump github.com/wtsi-npg/logshim-zerolog 1.2.0 to 1.3.0
+
+## [2.3.0] - 2021-02-25
+
+### Changed
+
+- Migrated the repository from github.com/kjsanger to github.com/wtsi-npg
+
+- Bump github.com/onsi/ginkgo from 1.12.2 to 1.15.0
+- Bump github.com/onsi/gomega from 1.9.0 to 1.10.5
+- Bump github.com/stretchr/testify from 1.6.1 to 1.7.0
+- Bump github.com/wtsi-npg/logshim from 1.1.0 to 1.2.0
+- Bump github.com/wtsi-npg/logshim-zerolog from 1.0.0 to 1.2.0
 
 ## [2.2.0] - 2020-06-11
 
@@ -65,8 +90,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bump baton from 2.0.0 to 2.0.1
 - Bump github.com/rs/zerolog from 1.17.2 to 1.18.0
 - Bump github.com/pkg/errors from 0.8.1 to 0.9.1
-- Bump github.com/kjsanger/logshim from 1.0.0 to 1.1.0
-- Bump github.com/kjsanger/logshim-zerolog from 1.0.0 to 1.1.0
+- Bump github.com/wtsi-npg/logshim from 1.0.0 to 1.1.0
+- Bump github.com/wtsi-npg/logshim-zerolog from 1.0.0 to 1.1.0
 - Bump github.com/onsi/gomega from 1.7.1 to 1.9.0
 - Bump github.com/onsi/ginkgo from 1.10.3 to 1.12.0
 
