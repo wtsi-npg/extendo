@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - [![Build Status](https://travis-ci.com/wtsi-npg/extendo.svg?branch=devel)](https://travis-ci.com/wtsi-npg/extendo)
+## [Unreleased] - [![Unit tests](https://github.com/wtsi-npg/extendo/actions/workflows/run-tests.yml/badge.svg)](https://github.com/wtsi-npg/extendo/actions/workflows/run-tests.yml)
 
 ### Added
 
@@ -75,8 +75,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bump baton from 2.0.0 to 2.0.1
 - Bump github.com/rs/zerolog from 1.17.2 to 1.18.0
 - Bump github.com/pkg/errors from 0.8.1 to 0.9.1
-- Bump github.com/kjsanger/logshim from 1.0.0 to 1.1.0
-- Bump github.com/kjsanger/logshim-zerolog from 1.0.0 to 1.1.0
+- Bump github.com/wtsi-npg/logshim from 1.0.0 to 1.1.0
+- Bump github.com/wtsi-npg/logshim-zerolog from 1.0.0 to 1.1.0
 - Bump github.com/onsi/gomega from 1.7.1 to 1.9.0
 - Bump github.com/onsi/ginkgo from 1.10.3 to 1.12.0
 
