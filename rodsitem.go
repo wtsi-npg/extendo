@@ -113,7 +113,7 @@ func (item *RodsItem) RodsPath() (s string) {
 	return s
 }
 
-// RodsPath returns the absolute, cleaned local path of the item, or an
+// LocalPath returns the absolute, cleaned local path of the item, or an
 // empty string.
 func (item *RodsItem) LocalPath() (s string) {
 	switch {
@@ -176,7 +176,8 @@ func (item *RodsItem) Metadata() []AVU {
 	return item.IAVUs
 }
 
-// HasAVU returns true if the RodsItem has the argument AVU in its metadata.
+// HasMetadatum returns true if the RodsItem has the argument AVU in its
+// metadata.
 func (item *RodsItem) HasMetadatum(avu AVU) bool {
 	for _, a := range item.IAVUs {
 		if a == avu {
@@ -186,8 +187,8 @@ func (item *RodsItem) HasMetadatum(avu AVU) bool {
 	return false
 }
 
-// HasSomeMetadata returns true if the RodsItem has at has at least one of the
-// argument AVUs in its metadata.
+// HasSomeMetadata returns true if the RodsItem has at least one of the argument
+// AVUs in its metadata.
 func (item *RodsItem) HasSomeMetadata(avus []AVU) bool {
 	lookup := make(map[AVU]bool)
 	for _, avu := range item.IAVUs {
@@ -465,10 +466,10 @@ type Replicate struct {
 	Resource string `json:"resource"`
 	// Location is the server where the replicate is located
 	Location string `json:"location"`
-	// Checksum it the checksum of the replicate
+	// Checksum is the checksum of the replicate
 	Checksum string `json:"checksum"`
 	// Number is iRODS' replicate number
-	Number uint16 `json:"replicate"`
+	Number uint16 `json:"number"`
 	// Valid is iRODS' flag describing whether the replicate is up-to-date
 	Valid bool `json:"valid"`
 }
@@ -486,17 +487,31 @@ func SortReplicates(reps []Replicate) {
 }
 
 type Timestamp struct {
+	// Created time of the replicate
 	Created  time.Time `json:"created,omitempty"`
+	// Modified time of the replicate
 	Modified time.Time `json:"modified,omitempty"`
-	Operator string    `json:"operator,omitempty"`
+	// Replicates is the replicate number the timestamp refers to
+	Replicates int `json:"replicates,omitempty"`
 }
 
-// SortTimestamps sorts times by Created and then by Modified.
+// SortTimestamps sorts times by Replicates, Created and then by Modified.
 func SortTimestamps(times []Timestamp) {
-	// Less if a Created time and other time is Zero is Created later, OR
-	// a Modified time and other time is Zero or is Modified later.
-
+	// Less if Replicates i < Replicates j.
+	//
+	// Less if the Created time is non-Zero and the other Created time is Zero
+	// or is later.
+	//
+	// Less if the Modified time is non-Zero time and other Modified time is
+	// Zero or is later.
 	sort.SliceStable(times, func(i, j int) bool {
+		if times[i].Replicates < times[j].Replicates {
+			return true
+		}
+		if times[i].Replicates > times[j].Replicates {
+			return false
+		}
+
 		ci := !times[i].Created.IsZero() // Is times creation time
 		cj := !times[j].Created.IsZero()
 		mi := !times[i].Modified.IsZero() // Is times modification time
@@ -504,6 +519,6 @@ func SortTimestamps(times []Timestamp) {
 
 		return (ci && !cj) || (!mi && mj) ||
 			(ci && cj && times[i].Created.Before(times[j].Created)) ||
-			(mi && mj && times[i].Modified.Before(times[j].Created))
+			(mi && mj && times[i].Modified.Before(times[j].Modified))
 	})
 }
