@@ -27,7 +27,6 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-
 	ex "github.com/wtsi-npg/extendo/v2"
 )
 
@@ -40,6 +39,12 @@ var _ = Describe("Find the baton-do executable", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(path).ToNot(BeEmpty())
 			Expect(filepath.Base(path)).To(Equal("baton-do"))
+		})
+
+		It("should report a version", func() {
+			version, err := ex.BatonVersion()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(version).To(MatchRegexp(`^\d+.\d+.\d+$`))
 		})
 	})
 
@@ -297,13 +302,53 @@ var _ = Describe("List an iRODS path", func() {
 
 				Expect(items).To(HaveLen(1))
 				reps := items[0].IReplicates
-				Expect(reps).To(HaveLen(1))
 
-				Expect(reps[0]).To(Equal(ex.Replicate{
-					Resource: "demoResc",
-					Location: "localhost",
-					Checksum: testChecksum,
-					Valid:    true}))
+				// NB: When baton is built against the iRODS 4.2.7 client
+				// libraries, it ignores the irods_default_resource in
+				// irods_environment.json. This causes files to hit a
+				// non-replication resource, even when one is requested,
+				// leading to a single replicates.
+				//
+				// When baton is built against the iRODS 4.2.10 client
+				// libraries, it respects the irods_default_resource in
+				// irods_environment.json.
+
+				// The replication resource assigns replicate number randomly.
+				expectedRepsX := []ex.Replicate{
+					{
+						Resource: "unixfs1",
+						Location: "localhost",
+						Checksum: testChecksum,
+						Number:   0,
+						Valid:    true,
+					},
+					{
+						Resource: "unixfs2",
+						Location: "localhost",
+						Checksum: testChecksum,
+						Number:   1,
+						Valid:    true},
+				}
+				expectedRepsY := []ex.Replicate{
+					{
+						Resource: "unixfs1",
+						Location: "localhost",
+						Checksum: testChecksum,
+						Number:   1,
+						Valid:    true,
+					},
+					{
+						Resource: "unixfs2",
+						Location: "localhost",
+						Checksum: testChecksum,
+						Number:   0,
+						Valid:    true,
+					},
+				}
+
+				Expect(reps).To(Or(
+					ConsistOf(expectedRepsX),
+					ConsistOf(expectedRepsY)))
 			})
 
 			It("should have timestamp information if requested", func() {
@@ -312,12 +357,30 @@ var _ = Describe("List an iRODS path", func() {
 
 				Expect(items).To(HaveLen(1))
 				stamps := items[0].ITimestamps
-				Expect(stamps).To(HaveLen(2))
+				Expect(stamps).To(Or(HaveLen(4)))
 
+				// TODO: We could write a custom matcher to allow us to use
+				// ConsistsOf. However, that needs a lot more code than the
+				// simple repetition below.
 				Expect(stamps[0].Created).
 					To(BeTemporally("~", time.Now(), time.Minute))
+				Expect(stamps[0].Modified).To(BeZero())
+				Expect(stamps[0].Replicates).To(Equal(0))
+
+				Expect(stamps[1].Created).To(BeZero())
 				Expect(stamps[1].Modified).
 					To(BeTemporally("~", time.Now(), time.Minute))
+				Expect(stamps[1].Replicates).To(Equal(0))
+
+				Expect(stamps[2].Created).
+					To(BeTemporally("~", time.Now(), time.Minute))
+				Expect(stamps[2].Modified).To(BeZero())
+				Expect(stamps[2].Replicates).To(Equal(1))
+
+				Expect(stamps[3].Created).To(BeZero())
+				Expect(stamps[3].Modified).
+					To(BeTemporally("~", time.Now(), time.Minute))
+				Expect(stamps[3].Replicates).To(Equal(1))
 			})
 
 			When("metadata are requested", func() {
@@ -365,6 +428,7 @@ var _ = Describe("List an iRODS path", func() {
 		})
 	})
 })
+
 
 var _ = Describe("Put a file into iRODS", func() {
 	var (

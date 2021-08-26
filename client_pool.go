@@ -73,7 +73,7 @@ type ClientPoolParams struct {
 	MaxClientIdleTime time.Duration // Inactivity time after which clients are considered idle.
 }
 
-// The default argument values for client pool creation.
+// DefaultClientPoolParams is default argument values for client pool creation.
 var DefaultClientPoolParams = ClientPoolParams{
 	MaxSize:           10,
 	GetTimeout:        time.Millisecond * 250,
