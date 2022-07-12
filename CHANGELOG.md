@@ -8,7 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+### Removed
+
+- Remove iRODS 4.2.10 from github actions test workflow
+
 ### Changed
+
+- Update baton to 3.3.0 in github actions test workflow
 
 ## [2.4.0] - 2021-04-15
 
