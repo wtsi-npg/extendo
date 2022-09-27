@@ -1,5 +1,6 @@
 /*
- * Copyright (C) 2019, 2020, 2021. Genome Research Ltd. All rights reserved.
+ * Copyright (C) 2019, 2020, 2021, 2022. Genome Research Ltd. All rights
+ * reserved.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -23,7 +24,7 @@ package extendo_test
 import (
 	"time"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	ex "github.com/wtsi-npg/extendo/v2"
@@ -211,11 +212,21 @@ var _ = Describe("Pool client runtime timeout", func() {
 			})
 
 			It("should stop those clients returned to it", func() {
-				time.Sleep(time.Second * 2)
+				allStopped := false
+				tries := 10
 
-				for _, c := range clients {
-					Expect(c.IsRunning()).To(BeFalse())
+				for i := 0; i < tries; i++ {
+					time.Sleep(time.Second * 1)
+					for _, c := range clients {
+						if c.IsRunning() {
+							continue
+						}
+						allStopped = true
+						break
+					}
 				}
+
+				Expect(allStopped).To(BeTrue())
 			})
 		})
 
@@ -244,11 +255,21 @@ var _ = Describe("Pool client runtime timeout", func() {
 			})
 
 			It("should stop those clients returned to it", func() {
-				time.Sleep(time.Second * 2)
+				allStopped := false
+				tries := 10
 
-				for _, c := range clients {
-					Expect(c.IsRunning()).To(BeFalse())
+				for i := 0; i < tries; i++ {
+					time.Sleep(time.Second * 1)
+					for _, c := range clients {
+						if c.IsRunning() {
+							continue
+						}
+						allStopped = true
+						break
+					}
 				}
+
+				Expect(allStopped).To(BeTrue())
 			})
 		})
 	})

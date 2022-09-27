@@ -4,7 +4,7 @@ on: [push, pull_request]
 
 jobs:
   build:
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-latest
     continue-on-error: ${{ matrix.experimental }} # Experimental builds may fail
 
     defaults:
@@ -76,7 +76,8 @@ jobs:
             "irods_user_name": "irods",
             "irods_zone_name": "testZone",
             "irods_home": "/testZone/home/irods",
-            "irods_default_resource": "replResc"
+            "irods_default_resource": "replResc",
+            "irods_default_hash_scheme": "MD5"
         }
         EOF
 
@@ -98,7 +99,7 @@ jobs:
 
     - name: "Install test runner"
       run: |
-        go get github.com/onsi/ginkgo/ginkgo
+        go get github.com/onsi/ginkgo/v2/ginkgo
         go get github.com/onsi/gomega/...
 
     - name: "Run tests"

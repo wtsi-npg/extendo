@@ -1,5 +1,6 @@
 /*
- * Copyright (C) 2019, 2020, 2021. Genome Research Ltd. All rights reserved.
+ * Copyright (C) 2019, 2020, 2021, 2022. Genome Research Ltd. All rights
+ * reserved.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -57,6 +58,7 @@ const (
 const (
 	RodsUserFileDoesNotExist  = int32(-310000) // iRODS: user file does not exist
 	RodsCatCollectionNotEmpty = int32(-821000) // iRODS: collection not empty
+	RodsUnixFileReadError     = int32(-512021) // iRODS: failed to read a file
 )
 
 // DefaultResponseTimeout is a timeout for the baton-do sub-process to respond
@@ -115,6 +117,8 @@ type Args struct {
 	AVU bool `json:"avu,omitempty"`
 	// Request checksums.
 	Checksum bool `json:"checksum,omitempty"`
+	// Request checksums are verified on put.
+	Verify bool `json:"verify,omitempty"`
 	// Restrict to collections.
 	Collection bool `json:"collection,omitempty"`
 	// Request collection contents.
