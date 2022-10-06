@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019, 2020. Genome Research Ltd. All rights reserved.
+ * Copyright (C) 2019, 2020, 2022. Genome Research Ltd. All rights reserved.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -41,9 +41,9 @@ func NewDataObject(client *Client, remotePath string) *DataObject {
 
 // PutDataObject makes a new instance by sending a file local at localPath
 // to remotePath in iRODS. It always uses a forced put operation and
-// calculates a server-side checksum. If any slices of AVUs are supplied, they
-// are added after the put operation is successful. The returned instance has
-// the new checksum fetched to the client.
+// calculates and verifies a server-side checksum. If any slices of AVUs are
+// supplied, they are added after the put operation is successful. The returned
+//instance has the new checksum fetched to the client.
 func PutDataObject(client *Client, localPath string, remotePath string,
 	avus ...[]AVU) (*DataObject, error) {
 	localPath = filepath.Clean(localPath)
@@ -56,25 +56,10 @@ func PutDataObject(client *Client, localPath string, remotePath string,
 
 	item := RodsItem{IDirectory: dir, IFile: file, IPath: path, IName: name}
 
-	// BEGIN
-	//
-	// NB: iRODS 4.1.* does not honour the create checksum option for
-	// zero-length files. See https://github.com/irods/irods/issues/4502
-	// Neither does it always honour it when files are force-put over an
-	// existing file. In such a case it leaves a stale checksum (of the
-	// previous file) while updating the file itself. This is a workaround
-	// for these bugs:
-
-	// 1. Put without checksum
-	putArgs := Args{Force: true, Checksum: false}
+	putArgs := Args{Force: true, Verify: true}
 	if _, err := client.Put(putArgs, item); err != nil {
 		return nil, err
 	}
-	// 2. Make a second request to create the checksum
-	if _, err := client.Checksum(Args{}, item); err != nil {
-		return nil, err
-	}
-	// END
 
 	if len(avus) > 0 {
 		var allAVUs []AVU
