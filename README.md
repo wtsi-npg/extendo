@@ -18,6 +18,10 @@ therefore baton is required for its operation.
 
 #### Dependencies:
 
+https://www.irods.org
+
+  Versions >= 4.2.7
+
 https://github.com/wtsi-npg/baton
 
   Versions >= 2.0.0
