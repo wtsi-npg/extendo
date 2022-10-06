@@ -219,8 +219,8 @@ var _ = Describe("Archive a DataObject into iRODS", func() {
 	})
 
 	AfterEach(func() {
-		//err = removeTmpCollection(workColl)
-		//Expect(err).NotTo(HaveOccurred())
+		err = removeTmpCollection(workColl)
+		Expect(err).NotTo(HaveOccurred())
 
 		client.StopIgnoreError()
 	})
