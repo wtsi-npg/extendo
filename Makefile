@@ -17,10 +17,10 @@ lint:
 check: test
 
 test:
-	ginkgo -r -slowSpecThreshold=30 -race
+	ginkgo -r -slow-spec-threshold=30s -race
 
 coverage:
-	ginkgo -r -slowSpecThreshold=30 -cover -coverprofile=coverage.out
+	ginkgo -r -slow-spec-threshold=30s -cover -coverprofile=coverage.out
 
 clean:
 	go clean

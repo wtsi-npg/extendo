@@ -6,15 +6,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - [![Unit tests](https://github.com/wtsi-npg/extendo/actions/workflows/run-tests.yml/badge.svg)](https://github.com/wtsi-npg/extendo/actions/workflows/run-tests.yml)
 
+## [2.5.0] - 2022-10-13
+
 ### Added
 
+- Checksum verification on put
+
+
+Removal of a workaround that was created for iRODS 4.1.* now allows
+extendo to support iRODS' checksum verification feature for `put` operations.
+This feature calculates a checksum from the local file on disk and compares
+this to the checksum of the remote data object in iRODS, as part of the `put`
+operation. This is the same behaviour as the iRODS icommand `iput -K`.
+
+### Removed
+
+- iRODS 4.1.* PutDataObject workaround
+- iRODS 4.2.10 GitHub Action tests
+
 ### Changed
+
+- Build with Go 1.17
+- Migrate GitHub Action from Ubuntu 18.04 to 20.04
+- Update baton to 4.0.0 in GitHub Action tests
+
+- Bump github.com/onsi/ginkgo from 1.16.1 to 2.1.6
+- Bump github.com/onsi/gomega from 1.11.0 to 1.20.2
+- Bump github.com/stretchr/testify from 1.7.0 to 1.8.0
+- Bump github.com/rs/zerolog from 1.21.0 to 1.28.0
+
 
 ## [2.4.0] - 2021-04-15
 
 ### Added
 
-- Added a Github Actions test workflow
+- Github Actions test automation
 
 ### Changed
 

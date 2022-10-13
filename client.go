@@ -1,5 +1,6 @@
 /*
- * Copyright (C) 2019, 2020, 2021. Genome Research Ltd. All rights reserved.
+ * Copyright (C) 2019, 2020, 2021, 2022. Genome Research Ltd. All rights
+ * reserved.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -57,11 +58,12 @@ const (
 const (
 	RodsUserFileDoesNotExist  = int32(-310000) // iRODS: user file does not exist
 	RodsCatCollectionNotEmpty = int32(-821000) // iRODS: collection not empty
+	RodsUnixFileReadError     = int32(-512021) // iRODS: failed to read a file
 )
 
-// Timeout for the baton-do sub-process to respond or confirm that it is still
-// running. Significant response times can be real, for example responding
-// after a put operation on 1 TiB of data.
+// DefaultResponseTimeout is a timeout for the baton-do sub-process to respond
+// or confirm that it is still  running. Significant response times can be real,
+// for example responding after a put operation on 1 TiB of data.
 var DefaultResponseTimeout = 5 * time.Second
 
 // Client is a launcher for a baton sub-process which holds its system I/O
@@ -115,6 +117,8 @@ type Args struct {
 	AVU bool `json:"avu,omitempty"`
 	// Request checksums.
 	Checksum bool `json:"checksum,omitempty"`
+	// Request checksums are verified on put.
+	Verify bool `json:"verify,omitempty"`
 	// Restrict to collections.
 	Collection bool `json:"collection,omitempty"`
 	// Request collection contents.
@@ -140,7 +144,7 @@ type ResultWrapper struct {
 	List *[]RodsItem `json:"multiple,omitempty"`
 }
 
-// ErrMsg allows handling of an iRODS error message in JSON.
+// ErrorMsg allows handling of an iRODS error message in JSON.
 type ErrorMsg struct {
 	Message string `json:"message"`
 	Code    int32  `json:"code"`
@@ -213,6 +217,25 @@ func FindBaton() (string, error) {
 	}
 
 	return filepath.Clean(baton), err
+}
+
+// BatonVersion reports the version string printed by baton-do --version
+func BatonVersion() (string, error) {
+	baton, err := FindBaton()
+	if err != nil {
+		return baton, err
+	}
+
+	cmd := exec.Command(baton, "--version")
+	var out bytes.Buffer
+	cmd.Stdout = &out
+
+	err = cmd.Run()
+	if err != nil {
+		return baton, err
+	}
+
+	return strings.TrimSpace(out.String()), err
 }
 
 // FindAndStart locates the baton-do executable using FindBaton, creates a
@@ -330,8 +353,8 @@ func (client *Client) Start(arg ...string) (*Client, error) {
 			case <-ctx.Done():
 				return
 			default:
-				// On cancelling, this is unblocked by the send goroutine
-				// closing stdin and we should reach EOF
+				// On cancelling, this is unblocked by the "send" goroutine
+				// closing stdin, and we should reach EOF
 				bout, re := rd.ReadBytes('\n')
 				if re == nil {
 					pout <- bytes.TrimRight(bout, "\r\n")
@@ -359,8 +382,8 @@ func (client *Client) Start(arg ...string) (*Client, error) {
 			case <-ctx.Done():
 				return
 			default:
-				// On cancelling, this is unblocked by the send goroutine
-				// closing stdin and we should reach EOF
+				// On cancelling, this is unblocked by the "send" goroutine
+				// closing stdin, and we should reach EOF
 				bout, re := rd.ReadBytes('\n')
 				if re == nil {
 					out := bytes.TrimRight(bout, "\r\n")
@@ -446,8 +469,8 @@ func (client *Client) Runtime() time.Duration {
 	return client.stopTime.Sub(client.startTime)
 }
 
-// Stop stops the baton sub-process, if it is running. Ignores any error
-// from the sub-process.
+// StopIgnoreError stops the baton sub-process, if it is running. Ignores any
+// error from the sub-process.
 func (client *Client) StopIgnoreError() {
 	if err := client.Stop(); err != nil {
 		logs.GetLogger().Error().Err(err).Int("pid", client.pid).
@@ -620,7 +643,7 @@ func (client *Client) MkDir(args Args, item RodsItem) (RodsItem, error) {
 	return items[0], err
 }
 
-// Puts a collection or data object into iRODS and returns the item. By
+// Put a collection or data object into iRODS and returns the item. By
 // setting Args.Recurse=true, the operation may be made recursive on a
 // collection.
 func (client *Client) Put(args Args, item RodsItem) ([]RodsItem, error) {
@@ -749,8 +772,8 @@ func (client *Client) putRecurse(args Args, item RodsItem) ([]RodsItem, error) {
 	return newItems, nil
 }
 
-// execute sends JSON to a baton-do proecess, which in turn passes a request to
-// the iRODS server. This methdd handles the write locking while a call to the
+// execute sends JSON to a baton-do process, which in turn passes a request to
+// the iRODS server. This method handles write locking while a call to the
 // iRODS server is being run.
 func (client *Client) execute(op string, args Args, item RodsItem) ([]RodsItem,
 	error) {
@@ -854,6 +877,10 @@ func unwrap(client *Client, envelope *Envelope) ([]RodsItem, error) {
 		}
 		SortRodsItems(contents)
 		items[i].IContents = contents
+
+		var reps = items[i].IReplicates
+		SortReplicates(reps)
+		items[i].IReplicates = reps
 
 		var avus = items[i].IAVUs
 		SortAVUs(avus)

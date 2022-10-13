@@ -155,7 +155,7 @@ func (coll *Collection) RemoveRecurse() error {
 	return err
 }
 
-// Contents returns the Collections from the collection contents. If the
+// Collections returns the Collections from the collection contents. If the
 // contents have not been Fetched, the slice will be empty.
 func (coll *Collection) Collections() []Collection {
 	var colls []Collection
@@ -169,7 +169,7 @@ func (coll *Collection) Collections() []Collection {
 	return colls
 }
 
-// Contents returns the DataObjects from the collection contents. If the
+// DataObjects returns the DataObjects from the collection contents. If the
 // contents have not been Fetched, the slice will be empty.
 func (coll *Collection) DataObjects() []DataObject {
 	var objs []DataObject
