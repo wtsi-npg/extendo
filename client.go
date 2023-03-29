@@ -184,7 +184,7 @@ func RodsErrorCode(err error) (int32, error) {
 		return e.Code(), nil
 	default:
 		return int32(0),
-			errors.Errorf("cannot get an iRODS error code from %v", err)
+			errors.Errorf("cannot get an iRODS error code from error: '%v'", err)
 	}
 }
 
@@ -419,14 +419,15 @@ func (client *Client) Start(arg ...string) (*Client, error) {
 
 	// Watch for baton sub-process completion and capture any error
 	go func() {
-		inWg.Wait()
-		outWg.Wait()
 		err := cmd.Wait()
 
 		client.Lock()
 		client.isRunning = false
 		client.stopTime = time.Now()
 		client.Unlock()
+
+		inWg.Wait()
+		outWg.Wait()
 
 		client.err <- err
 		close(client.err)
@@ -473,7 +474,7 @@ func (client *Client) Runtime() time.Duration {
 // error from the sub-process.
 func (client *Client) StopIgnoreError() {
 	if err := client.Stop(); err != nil {
-		logs.GetLogger().Error().Err(err).Int("pid", client.pid).
+		logs.GetLogger().Error().Err(err).Int("pid", client.ClientPid()).
 			Msg("stopped client")
 	}
 }
@@ -777,14 +778,13 @@ func (client *Client) putRecurse(args Args, item RodsItem) ([]RodsItem, error) {
 // iRODS server is being run.
 func (client *Client) execute(op string, args Args, item RodsItem) ([]RodsItem,
 	error) {
-	client.Lock()
-	defer client.Unlock()
-
-	if !client.isRunning {
+	if !client.IsRunning() {
 		return []RodsItem{}, errors.New("client is not running")
 	}
 
+	client.Lock()
 	client.activityTime = time.Now()
+	client.Unlock()
 
 	response, err := client.send(wrap(op, args, item))
 	if err != nil {
@@ -817,10 +817,13 @@ waitResponse:
 		case <-time.After(client.respTimeout):
 			// If the sub-process is running we just wait again, until either
 			// it responds or stops running.
-			if !client.isRunning {
-				return nil, errors.New("receiving failed")
+			if !client.IsRunning() {
+				ps := client.cmd.ProcessState
+				return nil, errors.Errorf("receiving failed because the client stopped. "+
+					"PID: %d, process state: %s", ps.Pid(), ps.String())
 			}
-			log.Debug().Str("executable", client.path).
+
+			log.Debug().Str("executable", client.path).Int("pid", client.ClientPid()).
 				Msg("receiving timed out, waiting again ...")
 		}
 	}
