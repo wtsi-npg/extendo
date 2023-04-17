@@ -6,12 +6,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - [![Unit tests](https://github.com/wtsi-npg/extendo/actions/workflows/run-tests.yml/badge.svg)](https://github.com/wtsi-npg/extendo/actions/workflows/run-tests.yml)
 
+## [2.6.0] - 2023-04-17
+
+### Fixed
+
+- Hang when baton crashed
+
+### Changed
+
+- Bump github.com/onsi/ginkgo/v2 from 2.1.6 to 2.9.1
+- Bump github.com/onsi/gomega from 1.20.2 to 1.27.6
+- Bump github.com/stretchr/testify from 1.8.0 to 1.8.2
+- Bump github.com/rs/zerolog from 1.28.0 to 1.29.0
+
 ## [2.5.0] - 2022-10-13
 
 ### Added
 
 - Checksum verification on put
-
 
 Removal of a workaround that was created for iRODS 4.1.* now allows
 extendo to support iRODS' checksum verification feature for `put` operations.

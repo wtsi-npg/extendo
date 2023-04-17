@@ -19,16 +19,16 @@ jobs:
       matrix:
         include:
           # iRODS 4.2.11 clients vs 4.2.7 server
-          - go: "1.17"
+          - go: "1.18"
             irods: "4.2.11"
-            server_image: "wsinpg/ub-16.04-irods-4.2.7:latest"
-            baton: "4.0.0"
+            server_image: "ghcr.io/wtsi-npg/ub-16.04-irods-4.2.7:latest"
+            baton: "4.0.1"
             experimental: false
           # iRODS 4.2.11 clients vs 4.2.11 server
-          - go: "1.17"
+          - go: "1.18"
             irods: "4.2.11"
-            server_image: "wsinpg/ub-18.04-irods-4.2.11:latest"
-            baton: "4.0.0"
+            server_image: "ghcr.io/wtsi-npg/ub-18.04-irods-4.2.11:latest"
+            baton: "4.0.1"
             experimental: false
 
     services:
@@ -38,10 +38,10 @@ jobs:
           - 1247:1247
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
 
     - name: "Set up Go ${{ matrix.go }}"
-      uses: actions/setup-go@v2
+      uses: actions/setup-go@v3
       with:
         go-version: ${{ matrix.go }}
 
@@ -88,7 +88,7 @@ jobs:
         baton-do --version
 
     - name: "Cache Go modules"
-      uses: actions/cache@v2
+      uses: actions/cache@v3
       with:
         path: |
           "$HOME/go/pkg/mod"
@@ -99,7 +99,7 @@ jobs:
 
     - name: "Install test runner"
       run: |
-        go get github.com/onsi/ginkgo/v2/ginkgo
+        go install -mod=mod github.com/onsi/ginkgo/v2/ginkgo
         go get github.com/onsi/gomega/...
 
     - name: "Run tests"

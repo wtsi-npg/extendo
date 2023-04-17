@@ -163,6 +163,21 @@ var _ = Describe("List an iRODS path", func() {
 		})
 	})
 
+	When("the path does not exist and contains printf placeholders", func() {
+		It("should return an iRODS -310000 error", func() {
+			path := filepath.Join(rootColl, "%s")
+			item := ex.RodsItem{IPath: path}
+
+			_, err := client.ListItem(ex.Args{}, item)
+			Expect(err).To(HaveOccurred())
+
+			code, e := ex.RodsErrorCode(err)
+			Expect(e).NotTo(HaveOccurred())
+
+			Expect(code).To(Equal(ex.RodsUserFileDoesNotExist))
+		})
+	})
+
 	When("the item is a collection", func() {
 		BeforeEach(func() {
 			testColl = ex.RodsItem{IPath: filepath.Join(workColl, "testdata")}
@@ -429,7 +444,6 @@ var _ = Describe("List an iRODS path", func() {
 		})
 	})
 })
-
 
 var _ = Describe("Put a file into iRODS", func() {
 	var (
