@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - [![Unit tests](https://github.com/wtsi-npg/extendo/actions/workflows/run-tests.yml/badge.svg)](https://github.com/wtsi-npg/extendo/actions/workflows/run-tests.yml)
 
+### Fixed
+
+- Noisy error log due to logging os.ErrClosed in the client goroutines reading
+  from baton STDOUT/STDERR. This error was raised because the subprocess could
+  close the reader before EOF was reached. The fix is to first wait for EOF once
+  the client has been cancelled.
+
 ## [2.6.0] - 2023-04-17
 
 ### Fixed
