@@ -358,7 +358,7 @@ func (client *Client) Start(arg ...string) (*Client, error) {
 				bout, re := rd.ReadBytes('\n')
 				if re == nil {
 					pout <- bytes.TrimRight(bout, "\r\n")
-				} else if re == io.EOF {
+				} else if errors.Is(re, io.EOF) {
 					log.Debug().Str("executable", client.path).
 						Msg("reached EOF on stdout")
 					return
@@ -389,7 +389,7 @@ func (client *Client) Start(arg ...string) (*Client, error) {
 					out := bytes.TrimRight(bout, "\r\n")
 					log.Debug().Str("stderr", client.path).
 						Msg(string(out))
-				} else if re == io.EOF {
+				} else if errors.Is(re, io.EOF) {
 					log.Debug().Str("executable", client.path).
 						Msg("reached EOF on stderr")
 					return
@@ -419,6 +419,7 @@ func (client *Client) Start(arg ...string) (*Client, error) {
 
 	// Watch for baton sub-process completion and capture any error
 	go func() {
+		outWg.Wait()
 		err := cmd.Wait()
 
 		client.Lock()
@@ -427,7 +428,6 @@ func (client *Client) Start(arg ...string) (*Client, error) {
 		client.Unlock()
 
 		inWg.Wait()
-		outWg.Wait()
 
 		client.err <- err
 		close(client.err)
