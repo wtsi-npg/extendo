@@ -314,7 +314,7 @@ var _ = Describe("Archive a DataObject into iRODS", func() {
 
 			// With checksum verification enabled, iRODS tries to read the local file
 			// first, which in this test is intentionally a directory.
-			Expect(code).To(Equal(ex.RodsUnixFileReadError))
+			Expect(code).To(Equal(ex.RodsUserFileDoesNotExist))
 		})
 	})
 })
