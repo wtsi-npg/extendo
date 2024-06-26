@@ -1,0 +1,47 @@
+FROM ghcr.io/wtsi-npg/ub-18.04-baton-irods-4.2.11:latest
+
+ARG GO_VERSION=1.22.4
+
+USER root
+
+RUN apt-get update && \
+    apt-get install -q -y --no-install-recommends \
+    apt-transport-https \
+    apt-utils \
+    build-essential \
+    ca-certificates \
+    curl \
+    gcc \
+    git \
+    make
+
+# It's more practical to build from an iRODS client image and install recent Go
+# than to build from a recent Go image and install iRODS clients.
+RUN curl -sSL -O "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz"
+
+RUN tar -C /usr/local -xzf "go${GO_VERSION}.linux-amd64.tar.gz" && \
+    rm "go${GO_VERSION}.linux-amd64.tar.gz"
+
+ENV GOPATH="/home/appuser/go"
+ENV PATH="$GOPATH/bin:/usr/local/go/bin:$PATH"
+
+RUN mkdir -p "$GOPATH"
+
+WORKDIR /app
+
+COPY go.mod go.sum /app/
+
+RUN go mod download && go mod verify
+
+COPY . /app
+
+RUN git config --global --add safe.directory /app
+
+RUN go install github.com/onsi/ginkgo/v2/ginkgo && \
+    go get github.com/onsi/gomega/... && \
+    ginkgo version
+
+ENV IRODS_ENVIRONMENT_FILE="/app/tests/.irods/irods_environment.json"
+
+RUN --mount=source=.git,target=.git,type=bind \
+    make test
