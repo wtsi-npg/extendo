@@ -25,9 +25,8 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	logs "github.com/wtsi-npg/logshim"
-
 	"github.com/wtsi-npg/extendo/v2/utilities"
+	logs "github.com/wtsi-npg/logshim"
 )
 
 // ClientPool is a pool of iRODS Clients for use by applications. It provides

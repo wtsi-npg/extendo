@@ -326,7 +326,7 @@ var _ = Describe("Inspect metadata on an DataObject", func() {
 
 		rootColl, workColl string
 
-		obj *ex.DataObject
+		obj  *ex.DataObject
 		avus []ex.AVU
 	)
 
@@ -354,37 +354,37 @@ var _ = Describe("Inspect metadata on an DataObject", func() {
 	Describe("Checking for a specific AVU (HasMetadatum)", func() {
 		When("the object does not have that AVU", func() {
 			It("should be false", func() {
-				Expect(obj.HasMetadatum(ex.AVU{Attr:"x", Value:"y"})).To(BeFalse())
+				Expect(obj.HasMetadatum(ex.AVU{Attr: "x", Value: "y"})).To(BeFalse())
 			})
 		})
 
 		When("the object has only that AVU", func() {
 			BeforeEach(func() {
-				avus = []ex.AVU{{Attr:"x", Value:"y"}}
+				avus = []ex.AVU{{Attr: "x", Value: "y"}}
 				err := obj.AddMetadata(avus)
 				Expect(err).NotTo(HaveOccurred())
 			})
 
 			It("should be true", func() {
-				Expect(obj.HasMetadatum(ex.AVU{Attr:"x", Value:"y"})).To(BeTrue())
+				Expect(obj.HasMetadatum(ex.AVU{Attr: "x", Value: "y"})).To(BeTrue())
 			})
 		})
 
 		When("the object has that, amongst other AVUs", func() {
 			BeforeEach(func() {
 				avus = []ex.AVU{
-					{Attr:"x", Value:"y"},
-					{Attr:"x", Value:"a"},
-					{Attr:"x", Value:"b"},
-					{Attr:"a", Value:"a"},
-					{Attr:"b", Value:"b"},
+					{Attr: "x", Value: "y"},
+					{Attr: "x", Value: "a"},
+					{Attr: "x", Value: "b"},
+					{Attr: "a", Value: "a"},
+					{Attr: "b", Value: "b"},
 				}
 				err := obj.AddMetadata(avus)
 				Expect(err).NotTo(HaveOccurred())
 			})
 
 			It("should be true", func() {
-				Expect(obj.HasMetadatum(ex.AVU{Attr:"x", Value:"y"})).To(BeTrue())
+				Expect(obj.HasMetadatum(ex.AVU{Attr: "x", Value: "y"})).To(BeTrue())
 			})
 		})
 	})
@@ -392,9 +392,9 @@ var _ = Describe("Inspect metadata on an DataObject", func() {
 	Describe("Checking for a subset of AVUs (HasSomeMetadata)", func() {
 		BeforeEach(func() {
 			avus = []ex.AVU{
-				{Attr:"x", Value:"y"},
-				{Attr:"x", Value:"a"},
-				{Attr:"a", Value:"a"},
+				{Attr: "x", Value: "y"},
+				{Attr: "x", Value: "a"},
+				{Attr: "a", Value: "a"},
 			}
 			err := obj.AddMetadata(avus)
 			Expect(err).NotTo(HaveOccurred())
@@ -403,9 +403,9 @@ var _ = Describe("Inspect metadata on an DataObject", func() {
 		When("the object does not have any of the AVUs", func() {
 			It("should be false", func() {
 				Expect(obj.HasSomeMetadata([]ex.AVU{
-					{Attr:"z", Value:"y"},
-					{Attr:"z", Value:"a"},
-					{Attr:"w", Value:"a"},
+					{Attr: "z", Value: "y"},
+					{Attr: "z", Value: "a"},
+					{Attr: "w", Value: "a"},
 				})).To(BeFalse())
 			})
 		})
@@ -436,9 +436,9 @@ var _ = Describe("Inspect metadata on an DataObject", func() {
 		When("the object has none of the AVUs", func() {
 			It("should be false when a none of the query AVUs are present", func() {
 				Expect(obj.HasSomeMetadata([]ex.AVU{
-					{Attr:"r", Value:"s"},
-					{Attr:"t", Value:"u"},
-					{Attr:"v", Value:"w"},
+					{Attr: "r", Value: "s"},
+					{Attr: "t", Value: "u"},
+					{Attr: "v", Value: "w"},
 				})).To(BeFalse())
 			})
 		})
@@ -447,9 +447,9 @@ var _ = Describe("Inspect metadata on an DataObject", func() {
 	Describe("Checking for a set of AVUs (HasAllMetadata)", func() {
 		BeforeEach(func() {
 			avus = []ex.AVU{
-				{Attr:"x", Value:"y"},
-				{Attr:"x", Value:"a"},
-				{Attr:"a", Value:"a"},
+				{Attr: "x", Value: "y"},
+				{Attr: "x", Value: "a"},
+				{Attr: "a", Value: "a"},
 			}
 			err := obj.AddMetadata(avus)
 			Expect(err).NotTo(HaveOccurred())
@@ -458,9 +458,9 @@ var _ = Describe("Inspect metadata on an DataObject", func() {
 		When("the object does not have any of the AVUs", func() {
 			It("should be false", func() {
 				Expect(obj.HasAllMetadata([]ex.AVU{
-					{Attr:"z", Value:"y"},
-					{Attr:"z", Value:"a"},
-					{Attr:"w", Value:"a"},
+					{Attr: "z", Value: "y"},
+					{Attr: "z", Value: "a"},
+					{Attr: "w", Value: "a"},
 				})).To(BeFalse())
 			})
 		})
@@ -493,9 +493,9 @@ var _ = Describe("Inspect metadata on an DataObject", func() {
 		When("the object has none ofthe AVUs", func() {
 			It("should be false when a none of the query AVUs are present", func() {
 				Expect(obj.HasAllMetadata([]ex.AVU{
-					{Attr:"r", Value:"s"},
-					{Attr:"t", Value:"u"},
-					{Attr:"v", Value:"w"},
+					{Attr: "r", Value: "s"},
+					{Attr: "t", Value: "u"},
+					{Attr: "v", Value: "w"},
 				})).To(BeFalse())
 			})
 		})
@@ -552,7 +552,7 @@ var _ = Describe("Replace metadata on a DataObject", func() {
 
 		When("it shares attributes with existing metadata", func() {
 			It("should be added", func() {
-				newAVU := ex.AVU{Attr:"a", Value: "nvalue",Units: "nunits"}
+				newAVU := ex.AVU{Attr: "a", Value: "nvalue", Units: "nunits"}
 
 				err := obj.ReplaceMetadata([]ex.AVU{newAVU})
 				Expect(err).NotTo(HaveOccurred())
@@ -562,4 +562,3 @@ var _ = Describe("Replace metadata on a DataObject", func() {
 		})
 	})
 })
-

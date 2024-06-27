@@ -21,9 +21,9 @@
 package extendo
 
 import (
-	"github.com/pkg/errors"
-
 	"path/filepath"
+
+	"github.com/pkg/errors"
 )
 
 type DataObject struct {
@@ -43,7 +43,7 @@ func NewDataObject(client *Client, remotePath string) *DataObject {
 // to remotePath in iRODS. It always uses a forced put operation and
 // calculates and verifies a server-side checksum. If any slices of AVUs are
 // supplied, they are added after the put operation is successful. The returned
-//instance has the new checksum fetched to the client.
+// instance has the new checksum fetched to the client.
 func PutDataObject(client *Client, localPath string, remotePath string,
 	avus ...[]AVU) (*DataObject, error) {
 	localPath = filepath.Clean(localPath)

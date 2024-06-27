@@ -15,6 +15,14 @@ RUN apt-get update && \
     git \
     make
 
+# Install the iRODS icommands package because it's useful for interactions with \
+# the server during development,
+RUN echo "deb [arch=amd64] https://packages.irods.org/apt/ $(lsb_release -sc) main" |\
+    tee /etc/apt/sources.list.d/renci-irods.list && \
+    apt-get update && \
+    apt-get install -q -y --no-install-recommends \
+    irods-icommands="4.2.11-1~$(lsb_release -sc)"
+
 # It's more practical to build from an iRODS client image and install recent Go
 # than to build from a recent Go image and install iRODS clients.
 RUN curl -sSL -O "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz"
@@ -35,13 +43,14 @@ RUN go mod download && go mod verify
 
 COPY . /app
 
-RUN git config --global --add safe.directory /app
-
 RUN go install github.com/onsi/ginkgo/v2/ginkgo && \
     go get github.com/onsi/gomega/... && \
     ginkgo version
 
-ENV IRODS_ENVIRONMENT_FILE="/app/tests/.irods/irods_environment.json"
+RUN chown -R appuser:appuser /app /home/appuser
 
-RUN --mount=source=.git,target=.git,type=bind \
-    make test
+USER appuser
+
+ENTRYPOINT ["/app/scripts/docker-entrypoint.sh"]
+
+CMD ["/bin/bash", "-c", "sleep infinity"]

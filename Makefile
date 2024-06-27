@@ -8,19 +8,19 @@ all: build
 install:
 	go install -ldflags ${ldflags}
 
-build:
-	go build -ldflags ${ldflags}
+build: install
+	CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags ${ldflags}
 
 lint:
 	golangci-lint run ./...
 
 check: test
 
-test:
-	ginkgo -r -race
+test: build
+	CGO_ENABLED=1 GOOS=linux GOARCH=amd64 ginkgo -r --race
 
 coverage:
-	ginkgo -r -cover -coverprofile=coverage.out
+	CGO_ENABLED=1 GOOS=linux GOARCH=amd64 ginkgo -r -cover -coverprofile=coverage.out
 
 clean:
 	go clean

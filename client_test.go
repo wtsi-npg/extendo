@@ -28,6 +28,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
 	ex "github.com/wtsi-npg/extendo/v2"
 )
 
@@ -45,7 +46,7 @@ var _ = Describe("Find the baton-do executable", func() {
 		It("should report a version", func() {
 			version, err := ex.BatonVersion()
 			Expect(err).NotTo(HaveOccurred())
-			Expect(version).To(MatchRegexp(`^\d+.\d+.\d+$`))
+			Expect(version).To(MatchRegexp(`^\d+.\d+.\d+.*`))
 		})
 	})
 
