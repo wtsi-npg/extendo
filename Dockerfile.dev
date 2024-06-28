@@ -16,7 +16,7 @@ RUN apt-get update && \
     make
 
 # Install the iRODS icommands package because it's useful for interactions with \
-# the server during development,
+# the server during development
 RUN echo "deb [arch=amd64] https://packages.irods.org/apt/ $(lsb_release -sc) main" |\
     tee /etc/apt/sources.list.d/renci-irods.list && \
     apt-get update && \
