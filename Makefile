@@ -1,15 +1,18 @@
 VERSION := $(shell git describe --always --tags --dirty)
 ldflags := "-X extendo.Version=${VERSION}"
+build_args := -a -v -ldflags ${ldflags}
+
+CGO_ENABLED?=${CGO_ENABLED}
 
 .PHONY: build install lint test check clean
 
 all: build
 
 install:
-	go install -ldflags ${ldflags}
+	go install ${build_args}
 
 build: install
-	CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags ${ldflags}
+	GOOS=linux GOARCH=amd64 go build ${build_args}
 
 lint:
 	golangci-lint run ./...
@@ -17,10 +20,10 @@ lint:
 check: test
 
 test: build
-	CGO_ENABLED=1 GOOS=linux GOARCH=amd64 ginkgo -r --race
+	GOOS=linux GOARCH=amd64 ginkgo -r --race
 
 coverage:
-	CGO_ENABLED=1 GOOS=linux GOARCH=amd64 ginkgo -r -cover -coverprofile=coverage.out
+	GOOS=linux GOARCH=amd64 ginkgo -r --cover -coverprofile=coverage.out
 
 clean:
 	go clean
