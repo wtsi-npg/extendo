@@ -67,8 +67,11 @@ const (
 var DefaultResponseTimeout = 5 * time.Second
 
 // Client is a launcher for a baton sub-process which holds its system I/O
-// streams and its channels. If accessed from more than one goroutine,
-// instances must be externally synchronised.
+// streams and its channels.
+//
+// Methods on Client may be called concurrently; requests will block and be
+// processed in a non-deterministic order. If the order of requests matters
+// (e.g. a Put followed by a List) external synchronisation will be required.
 type Client struct {
 	path         string             // Path of the baton executable.
 	cmd          *exec.Cmd          // Cmd of the sub-process, once started.
@@ -83,12 +86,12 @@ type Client struct {
 	inWaitGroup  *sync.WaitGroup    // WaitGroup for STDIN goroutine.
 	outWaitGroup *sync.WaitGroup    // WaitGroup for STDOUT/STDERR goroutines.
 	sync.RWMutex
-	out          map[uint64]chan<- []byte // For receiving from the sub-process.
+	out          map[uint64]chan<- []byte // For sending response data to the request it is for.
 	isRunning    bool                     // Flag indicating that the sub-process is running.
 	startTime    time.Time                // Time at which the sub-process was started.
 	stopTime     time.Time                // Time at which the sub-process completed.
 	activityTime time.Time                // Time of the last activity. Updated by execute().
-	nextID       uint64
+	nextID       uint64                   // ID of the next request to be sent; used to map a response to the correct channel in the out map.
 }
 
 type envelopeID struct {
@@ -770,7 +773,8 @@ func (client *Client) putRecurse(args Args, item RodsItem) ([]RodsItem, error) {
 				IDirectory: dir,
 				IFile:      info.Name(),
 				IPath:      filepath.Clean(filepath.Join(rodsRoot, dir)),
-				IName:      info.Name()}
+				IName:      info.Name(),
+			}
 			newItems = append(newItems, obj)
 		}
 
@@ -807,7 +811,8 @@ func (client *Client) putRecurse(args Args, item RodsItem) ([]RodsItem, error) {
 // the iRODS server. This method handles write locking while a call to the
 // iRODS server is being run.
 func (client *Client) execute(op string, args Args, item RodsItem) ([]RodsItem,
-	error) {
+	error,
+) {
 	if !client.IsRunning() {
 		return []RodsItem{}, errors.New("client is not running")
 	}
@@ -887,8 +892,10 @@ func wrap(operation string, args Args, target RodsItem, id uint64) *Envelope {
 func unwrap(client *Client, envelope *Envelope) ([]RodsItem, error) {
 	var items []RodsItem
 	if envelope.ErrorMsg != nil {
-		re := RodsError{errors.New(envelope.ErrorMsg.Message),
-			envelope.ErrorMsg.Code}
+		re := RodsError{
+			errors.New(envelope.ErrorMsg.Message),
+			envelope.ErrorMsg.Code,
+		}
 
 		return items, errors.Wrapf(&re, "%s operation failed",
 			envelope.Operation)
@@ -914,26 +921,26 @@ func unwrap(client *Client, envelope *Envelope) ([]RodsItem, error) {
 	for i := range items {
 		items[i].client = client
 
-		var contents = items[i].IContents
+		contents := items[i].IContents
 		for j := range contents {
 			contents[j].client = client
 		}
 		SortRodsItems(contents)
 		items[i].IContents = contents
 
-		var reps = items[i].IReplicates
+		reps := items[i].IReplicates
 		SortReplicates(reps)
 		items[i].IReplicates = reps
 
-		var avus = items[i].IAVUs
+		avus := items[i].IAVUs
 		SortAVUs(avus)
 		items[i].IAVUs = avus
 
-		var acls = items[i].IACLs
+		acls := items[i].IACLs
 		SortACLs(acls)
 		items[i].IACLs = acls
 
-		var timestamps = items[i].ITimestamps
+		timestamps := items[i].ITimestamps
 		SortTimestamps(timestamps)
 		items[i].ITimestamps = timestamps
 	}
