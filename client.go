@@ -67,8 +67,11 @@ const (
 var DefaultResponseTimeout = 5 * time.Second
 
 // Client is a launcher for a baton sub-process which holds its system I/O
-// streams and its channels. If accessed from more than one goroutine,
-// instances must be externally synchronised.
+// streams and its channels.
+//
+// Methods on Client may be called concurrently; requests will block and be
+// processed in a non-deterministic order. If the order of requests matters
+// (e.g. a Put followed by a List) external synchronisation will be required.
 type Client struct {
 	path         string             // Path of the baton executable.
 	cmd          *exec.Cmd          // Cmd of the sub-process, once started.
@@ -76,7 +79,6 @@ type Client struct {
 	stdout       io.ReadCloser      // stdout of the sub-process, once started.
 	stderr       io.ReadCloser      // stderr of the sub-process, once started.
 	in           chan []byte        // For sending to the sub-process.
-	out          chan []byte        // For receiving from the sub-process.
 	err          chan error         // For recording any sub-process error.
 	pid          int                // PID of the sub-process.
 	respTimeout  time.Duration      // Timeout for the sub-process to respond.
@@ -84,10 +86,17 @@ type Client struct {
 	inWaitGroup  *sync.WaitGroup    // WaitGroup for STDIN goroutine.
 	outWaitGroup *sync.WaitGroup    // WaitGroup for STDOUT/STDERR goroutines.
 	sync.RWMutex
-	isRunning    bool      // Flag indicating that the sub-process is running.
-	startTime    time.Time // Time at which the sub-process was started.
-	stopTime     time.Time // Time at which the sub-process completed.
-	activityTime time.Time // Time of the last activity. Updated by execute().
+	out          map[uint64]chan<- []byte // For sending response data to the request it is for.
+	isRunning    bool                     // Flag indicating that the sub-process is running.
+	startTime    time.Time                // Time at which the sub-process was started.
+	stopTime     time.Time                // Time at which the sub-process completed.
+	activityTime time.Time                // Time of the last activity. Updated by execute().
+	nextID       uint64                   // ID of the next request to be sent; used to map a response to the correct channel in the out map.
+}
+
+type envelopeID struct {
+	// Client-unique request ID
+	ID uint64
 }
 
 // Envelope is the JSON document accepted by baton-do, describing an operation
@@ -95,6 +104,7 @@ type Client struct {
 // afterwards, describing the outcome of the operation, including return value
 // and errors.
 type Envelope struct {
+	envelopeID
 	// Operation for baton-do.
 	Operation string `json:"operation"`
 	// Arguments for operation.
@@ -306,7 +316,6 @@ func (client *Client) Start(arg ...string) (*Client, error) {
 
 	// Sub-process input and response synchronisation
 	pin := make(chan []byte)
-	pout := make(chan []byte)
 	perr := make(chan error, 1)
 
 	// I/O goroutine cancelling and cleanup
@@ -345,6 +354,15 @@ func (client *Client) Start(arg ...string) (*Client, error) {
 	// Receive messages from the baton sub-process STDOUT
 	go func(ctx context.Context) {
 		defer outWg.Done()
+		defer func() {
+			client.Lock()
+
+			for _, ch := range client.out {
+				close(ch)
+			}
+
+			client.Unlock()
+		}()
 
 		rd := bufio.NewReader(stdout)
 
@@ -357,7 +375,23 @@ func (client *Client) Start(arg ...string) (*Client, error) {
 				// closing stdin, and we should reach EOF
 				bout, re := rd.ReadBytes('\n')
 				if re == nil {
-					pout <- bytes.TrimRight(bout, "\r\n")
+					resp := bytes.TrimRight(bout, "\r\n")
+
+					var envID envelopeID
+					if err := json.Unmarshal(resp, &envID); err != nil {
+						continue
+					}
+
+					client.Lock()
+					pout, ok := client.out[envID.ID]
+					delete(client.out, envID.ID)
+					client.Unlock()
+
+					if !ok {
+						continue
+					}
+
+					pout <- resp
 				} else if errors.Is(re, io.EOF) {
 					log.Debug().Str("executable", client.path).
 						Msg("reached EOF on stdout")
@@ -407,7 +441,7 @@ func (client *Client) Start(arg ...string) (*Client, error) {
 	client.stdout = stdout
 	client.stderr = stderr
 	client.in = pin
-	client.out = pout
+	client.out = make(map[uint64]chan<- []byte)
 	client.err = perr
 	client.pid = cmd.Process.Pid
 	client.isRunning = true
@@ -545,7 +579,6 @@ func (client *Client) Get(args Args, item RodsItem) (RodsItem, error) {
 // Args.Replicates = true Include replicates for data objects
 // Args.Size = true       Include size for data objects
 // Args.Timestamp = true  Include timestamps for data objects
-//
 func (client *Client) List(args Args, item RodsItem) ([]RodsItem, error) {
 	if args.Recurse {
 		return client.listRecurse(args, item)
@@ -740,7 +773,8 @@ func (client *Client) putRecurse(args Args, item RodsItem) ([]RodsItem, error) {
 				IDirectory: dir,
 				IFile:      info.Name(),
 				IPath:      filepath.Clean(filepath.Join(rodsRoot, dir)),
-				IName:      info.Name()}
+				IName:      info.Name(),
+			}
 			newItems = append(newItems, obj)
 		}
 
@@ -777,16 +811,22 @@ func (client *Client) putRecurse(args Args, item RodsItem) ([]RodsItem, error) {
 // the iRODS server. This method handles write locking while a call to the
 // iRODS server is being run.
 func (client *Client) execute(op string, args Args, item RodsItem) ([]RodsItem,
-	error) {
+	error,
+) {
 	if !client.IsRunning() {
 		return []RodsItem{}, errors.New("client is not running")
 	}
 
+	out := make(chan []byte, 1)
+
 	client.Lock()
 	client.activityTime = time.Now()
+	client.nextID++
+	id := client.nextID
+	client.out[id] = out
 	client.Unlock()
 
-	response, err := client.send(wrap(op, args, item))
+	response, err := client.send(wrap(op, args, item, id), out)
 	if err != nil {
 		return nil, err
 	}
@@ -794,7 +834,7 @@ func (client *Client) execute(op string, args Args, item RodsItem) ([]RodsItem,
 	return unwrap(client, response)
 }
 
-func (client *Client) send(envelope *Envelope) (*Envelope, error) {
+func (client *Client) send(envelope *Envelope, out <-chan []byte) (*Envelope, error) {
 	log := logs.GetLogger()
 
 	jsonMessage, err := json.Marshal(envelope)
@@ -810,7 +850,7 @@ func (client *Client) send(envelope *Envelope) (*Envelope, error) {
 waitResponse:
 	for {
 		select {
-		case jsonResponse = <-client.out:
+		case jsonResponse = <-out:
 			log.Debug().Msgf("Received %s", jsonResponse)
 			break waitResponse
 
@@ -838,8 +878,13 @@ waitResponse:
 
 // wrap adds the JSON envelope to the iRODS operation. See the baton-do
 // documentation for details.
-func wrap(operation string, args Args, target RodsItem) *Envelope {
-	return &Envelope{Operation: operation, Arguments: args, Target: target}
+func wrap(operation string, args Args, target RodsItem, id uint64) *Envelope {
+	return &Envelope{
+		envelopeID: envelopeID{ID: id},
+		Operation:  operation,
+		Arguments:  args,
+		Target:     target,
+	}
 }
 
 // unwrap removes the envelope from JSON returned by baton-do and returns any
@@ -847,8 +892,10 @@ func wrap(operation string, args Args, target RodsItem) *Envelope {
 func unwrap(client *Client, envelope *Envelope) ([]RodsItem, error) {
 	var items []RodsItem
 	if envelope.ErrorMsg != nil {
-		re := RodsError{errors.New(envelope.ErrorMsg.Message),
-			envelope.ErrorMsg.Code}
+		re := RodsError{
+			errors.New(envelope.ErrorMsg.Message),
+			envelope.ErrorMsg.Code,
+		}
 
 		return items, errors.Wrapf(&re, "%s operation failed",
 			envelope.Operation)
@@ -874,26 +921,26 @@ func unwrap(client *Client, envelope *Envelope) ([]RodsItem, error) {
 	for i := range items {
 		items[i].client = client
 
-		var contents = items[i].IContents
+		contents := items[i].IContents
 		for j := range contents {
 			contents[j].client = client
 		}
 		SortRodsItems(contents)
 		items[i].IContents = contents
 
-		var reps = items[i].IReplicates
+		reps := items[i].IReplicates
 		SortReplicates(reps)
 		items[i].IReplicates = reps
 
-		var avus = items[i].IAVUs
+		avus := items[i].IAVUs
 		SortAVUs(avus)
 		items[i].IAVUs = avus
 
-		var acls = items[i].IACLs
+		acls := items[i].IACLs
 		SortACLs(acls)
 		items[i].IACLs = acls
 
-		var timestamps = items[i].ITimestamps
+		timestamps := items[i].ITimestamps
 		SortTimestamps(timestamps)
 		items[i].ITimestamps = timestamps
 	}

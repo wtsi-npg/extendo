@@ -2,6 +2,8 @@ module github.com/wtsi-npg/extendo/v2
 
 go 1.24
 
+toolchain go1.24.1
+
 require (
 	github.com/onsi/ginkgo/v2 v2.23.3
 	github.com/onsi/gomega v1.37.0
