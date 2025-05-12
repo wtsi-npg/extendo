@@ -34,8 +34,8 @@ github.com/wtsi-npg/logshim v1.5.0 h1:Ror+LE2DCbTytMTYGEpYpoAOX2Qpat5vYa8BPvygly
 github.com/wtsi-npg/logshim v1.5.0/go.mod h1:e3+dd6fWzRpX+Lk2JM6s13F7BRypHutzatIxZklY1NI=
 github.com/wtsi-npg/logshim-zerolog v1.5.0 h1:i6lE9Y99PRPGmJ7IkMiTm4a7QwLHYe/gsykSDS+g4KI=
 github.com/wtsi-npg/logshim-zerolog v1.5.0/go.mod h1:5/ZUS1GI7kAx6iXi7Ntx4o3xRtZc2RqPABKlRZ0E0Y8=
-golang.org/x/net v0.37.0 h1:1zLorHbz+LYj7MQlSf1+2tPIIgibq2eL5xkrGk6f+2c=
-golang.org/x/net v0.37.0/go.mod h1:ivrbrMbzFq5J41QOQh0siUuly180yBYtLp+CKbEaFx8=
+golang.org/x/net v0.38.0 h1:vRMAPTMaeGqVhG5QyLJHqNDwecKTomGeqbnfZyKlBI8=
+golang.org/x/net v0.38.0/go.mod h1:ivrbrMbzFq5J41QOQh0siUuly180yBYtLp+CKbEaFx8=
 golang.org/x/sys v0.0.0-20220811171246-fbc7d0a398ab/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
 golang.org/x/sys v0.6.0/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
 golang.org/x/sys v0.12.0/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
