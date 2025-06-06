@@ -141,7 +141,7 @@ type Args struct {
 	Recurse bool `json:"recurse,omitempty"`
 	// Request replicate information.
 	Replicate bool `json:"replicate,omitempty"`
-	// Save GET files..
+	// Save data objects retrieved with the GET operation.
 	Save bool `json:"save,omitempty"`
 	// Request data object size.
 	Size bool `json:"size,omitempty"`
