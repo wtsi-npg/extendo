@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2019, 2020, 2021, 2022. Genome Research Ltd. All rights
- * reserved.
+ * Copyright (C) 2019, 2020, 2021, 2022, 2026. Genome Research Ltd. All
+ * rights reserved.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -30,7 +30,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	ex "github.com/wtsi-npg/extendo/v2"
+	ex "github.com/wtsi-npg/extendo/v3"
 )
 
 var _ = Describe("Find the baton-do executable", func() {
