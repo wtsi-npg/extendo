@@ -1,4 +1,4 @@
-module github.com/wtsi-npg/extendo/v2
+module github.com/wtsi-npg/extendo/v3
 
 go 1.24
 

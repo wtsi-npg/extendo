@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019, 2020, 2021. Genome Research Ltd. All rights reserved.
+ * Copyright (C) 2019, 2020, 2021, 2026. Genome Research Ltd. All rights reserved.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,7 +25,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"github.com/wtsi-npg/extendo/v2/utilities"
+	"github.com/wtsi-npg/extendo/v3/utilities"
 	logs "github.com/wtsi-npg/logshim"
 )
 
