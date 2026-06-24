@@ -36,8 +36,7 @@ func TestMain(m *testing.M) {
 	loggerImpl := zlog.New(os.Stderr, logs.ErrorLevel)
 
 	writer := zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.RFC3339}
-	consoleLogger := loggerImpl.Logger.Output(zerolog.SyncWriter(writer))
-	loggerImpl.Logger = &consoleLogger
+	loggerImpl.Logger = new(loggerImpl.Logger.Output(zerolog.SyncWriter(writer)))
 	logs.InstallLogger(loggerImpl)
 
 	os.Exit(m.Run())
@@ -193,10 +192,10 @@ func TestUniqAVUs(t *testing.T) {
 }
 
 func TestAVU_HasNamespace(t *testing.T) {
-	assert.False(t, AVU{Attr:"x",Value: "y"}.HasNamespace())
-	assert.False(t, AVU{Attr:":x", Value:"y"}.HasNamespace())
-	assert.True(t, AVU{Attr:"a:x", Value: "y"}.HasNamespace())
-	assert.True(t, AVU{Attr:"aa:x",Value: "y"}.HasNamespace())
+	assert.False(t, AVU{Attr: "x", Value: "y"}.HasNamespace())
+	assert.False(t, AVU{Attr: ":x", Value: "y"}.HasNamespace())
+	assert.True(t, AVU{Attr: "a:x", Value: "y"}.HasNamespace())
+	assert.True(t, AVU{Attr: "aa:x", Value: "y"}.HasNamespace())
 }
 
 func TestAVU_SetNamespace(t *testing.T) {
@@ -208,7 +207,7 @@ func TestAVU_SetNamespace(t *testing.T) {
 }
 
 func TestAVU_Namespace(t *testing.T) {
-	avu0 := AVU{Attr:"a:x", Value: "y", Units: "z"}
+	avu0 := AVU{Attr: "a:x", Value: "y", Units: "z"}
 	assert.Equal(t, avu0.Namespace(), "a")
 
 	avu1 := AVU{Attr: "x", Value: "y", Units: "z"}
