@@ -26,11 +26,31 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
 
 	ex "github.com/wtsi-npg/extendo/v3"
 )
+
+// batonReportsPhysicalPath reports whether the given baton version (from
+// baton-do --version) supports the replicate physical_path field, added in
+// baton 6.1.0. Unparseable versions are treated as unsupported.
+func batonReportsPhysicalPath(version string) bool {
+	parts := strings.Split(strings.TrimSpace(version), ".")
+	if len(parts) < 2 {
+		return false
+	}
+
+	major, errMajor := strconv.Atoi(parts[0])
+	minor, errMinor := strconv.Atoi(parts[1])
+	if errMajor != nil || errMinor != nil {
+		return false
+	}
+
+	return major > 6 || (major == 6 && minor >= 1)
+}
 
 type itemPathTransform func(i []ex.RodsItem) []string
 type collPathTransform func(i []ex.Collection) []string
