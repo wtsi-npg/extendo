@@ -421,9 +421,36 @@ var _ = Describe("List an iRODS path", func() {
 					},
 				}
 
+				// physical_path is only reported by baton >= 6.1.0 and is
+				// deployment-specific; blank it for this structural comparison.
+				for i := range reps {
+					reps[i].PhysicalPath = ""
+				}
+
 				Expect(reps).To(Or(
 					ConsistOf(expectedRepsX),
 					ConsistOf(expectedRepsY)))
+			})
+
+			It("should have replicate physical paths if requested", func() {
+				// Older baton does not report physical_path; skip there.
+				version, err := ex.BatonVersion()
+				Expect(err).NotTo(HaveOccurred())
+
+				if !batonReportsPhysicalPath(version) {
+					Skip("baton " + version + " does not report physical_path")
+				}
+
+				items, err := client.List(ex.Args{Replicate: true}, testObj)
+				Expect(err).NotTo(HaveOccurred())
+
+				Expect(items).To(HaveLen(1))
+				reps := items[0].IReplicates
+				Expect(reps).ToNot(BeEmpty())
+
+				for _, rep := range reps {
+					Expect(rep.PhysicalPath).ToNot(BeEmpty())
+				}
 			})
 
 			It("should have timestamp information if requested", func() {

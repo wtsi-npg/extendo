@@ -472,6 +472,9 @@ type Replicate struct {
 	Number uint16 `json:"number"`
 	// Valid is iRODS' flag describing whether the replicate is up-to-date
 	Valid bool `json:"valid"`
+	// PhysicalPath is the replicate's file path on the resource server
+	// (reported by baton >= 6.1.0; missing for older baton)
+	PhysicalPath string `json:"physical_path,omitempty"`
 }
 
 // SortReplicates sorts reps by Resource, then Location, then Number, then
